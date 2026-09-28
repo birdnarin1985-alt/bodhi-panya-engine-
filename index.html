@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bodhi-Panya Engine - The Living Architectural Organism</title>
+    <style>
+        body { margin: 0; background: #f6f4ee; overflow: hidden; }
+        canvas { display: block; }
+        #info {
+            position: absolute; bottom: 20px; left: 20px;
+            font-family: monospace; font-size: 12px; color: #555;
+            background: rgba(255,255,255,0.7); padding: 8px 12px; border-radius: 4px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="engineCanvas"></canvas>
+    <div id="info">Bodhi-Panya Engine: Living Organism (Rupa-Nama & Cellular Breath Active)</div>
+
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // ==========================================
+        // 🧬 1. ฝั่ง "นาม" & ขันธ์ 5: โครงสร้างเซลล์และลมหายใจ
+        // ==========================================
+        class ArchitecturalCell {
+            constructor(id, type, coords) {
+                this.id = id;
+                this.type = type; // 'column', 'ridge', 'spire', 'roof'
+                this.originCoords = coords;
+                this.currentCoords = { ...coords };
+                
+                // ธาตุวาโย (Vayo-dhatu) - ลมหายใจและจังหวะชีวิต
+                this.breathPhase = Math.random() * Math.PI * 2;
+                this.breathSpeed = 0.025; 
+                this.breathAmplitude = 0.6;
+            }
+
+            // เมตตาต่อระบบ: คำนวณเบาๆ ด้วย Delta Time / Frame Pulse
+            update(time) {
+                this.breathPhase += this.breathSpeed;
+                const pulse = Math.sin(this.breathPhase + time) * this.breathAmplitude;
+
+                if (this.type === 'spire' || this.type === 'ridge') {
+                    this.currentCoords.y = this.originCoords.y + pulse * 1.2;
+                } else {
+                    this.currentCoords.x = this.originCoords.x + (pulse * 0.15);
+                }
+            }
+        }
+
+        // ==========================================
+        // 🏛️ 2. สร้างเครือข่ายสถาปัตยกรรมวิหาร 100 เมตร
+        // ==========================================
+        const cellularNetwork = [];
+        const facesBuffer = [];
+
+        const halfW = 28;       
+        const baseH = 20;       
+        const pillarH = 50;     
+        const beamH = baseH + pillarH; 
+        
+        const lowerRidgeH = beamH + 32;   
+        const upperRidgeH = beamH + 68;   
+        const spireTopH   = upperRidgeH + 80; 
+
+        const totalBays = 20;   
+        const bayLen = 16.5;    
+
+        for (let i = 0; i < totalBays; i++) {
+            const zFront = -(i * bayLen);
+            const zBack  = -((i + 1) * bayLen);
+
+            const colL_top = { x: -halfW, y: beamH, z: zFront };
+            const colR_top = { x:  halfW, y: beamH, z: zFront };
+
+            cellularNetwork.push(new ArchitecturalCell(`col-L-${i}`, 'column', colL_top));
+            cellularNetwork.push(new ArchitecturalCell(`col-R-${i}`, 'column', colR_top));
+
+            // ผืนหลังคา (กายเนื้อ)
+            facesBuffer.push({
+                type: 'roof-face',
+                vertices: [
+                    { x: 0, y: upperRidgeH, z: zBack },
+                    { x: 0, y: upperRidgeH, z: zFront },
+                    { x: halfW + 6, y: beamH + 10, z: zFront },
+                    { x: halfW + 6, y: beamH + 10, z: zBack }
+                ],
+                color: 'rgba(230, 140, 40, 0.22)'
+            });
+        }
+
+        const spireCell = new ArchitecturalCell('spire-top', 'spire', { x: 0, y: spireTopH, z: -50 });
+        cellularNetwork.push(spireCell);
+
+        // ==========================================
+        // 👁️ 3. ฝั่ง "รูป" & ธาตุ 4: การฉายภาพและเรนเดอร์ (Isometric Projection)
+        // ==========================================
+        function project(x, y, z) {
+            const angle = Math.PI / 6;
+            const scale = 0.72;
+
+            const isoX = (x - z) * Math.cos(angle);
+            const isoY = -(y + (x + z) * Math.sin(angle));
+
+            return {
+                x: (isoX * scale) + (canvas.width / 2) - 20,
+                y: (isoY * scale) + (canvas.height / 2) + 60
+            };
+        }
+
+        // ฟังก์ชันเส้นหมึกสเก็ตช์มือ (Human-like Ink Stylizer)
+        function drawInkLine(p1, p2, width = 1.4, overShoot = 5, jitter = 0.8) {
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const len = Math.hypot(dx, dy);
+            if (len === 0) return;
+
+            const uX = dx / len;
+            const uY = dy / len;
+            const startX = p1.x - (uX * overShoot);
+            const startY = p1.y - (uY * overShoot);
+            const endX   = p2.x + (uX * overShoot);
+            const endY   = p2.y + (uY * overShoot);
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+
+            const steps = Math.max(2, Math.floor(len / 20));
+            for (let i = 1; i <= steps; i++) {
+                const t = i / steps;
+                const rJ = (Math.random() - 0.5) * jitter;
+                ctx.lineTo(startX + (endX - startX) * t + rJ, startY + (endY - startY) * t + rJ);
+            }
+
+            ctx.strokeStyle = '#1e1c1a';
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+        }
+
+        let globalTime = 0;
+
+        // ==========================================
+        // 🔄 4. Main Loop: สติสัมปชัญญะและวัฏจักรการเกิด-ดับ
+        // ==========================================
+        function renderLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            globalTime += 0.04;
+
+            // อัปเดตลมหายใจทุกเซลล์ (นาม)
+            cellularNetwork.forEach(cell => cell.update(globalTime));
+
+            // เรนเดอร์ผืนหลังคาและกายเนื้อ
+            facesBuffer.forEach(face => {
+                const pts = face.vertices.map(v => project(v.x, v.y, v.z));
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                ctx.closePath();
+                ctx.fillStyle = face.color;
+                ctx.fill();
+            });
+
+            // เรนเดอร์โครงสร้างเสาและยอดฉัตร (รูปและเส้นหมึก)
+            cellularNetwork.forEach(cell => {
+                if (cell.type === 'column') {
+                    const top = project(cell.currentCoords.x, cell.currentCoords.y, cell.currentCoords.z);
+                    const base = project(cell.currentCoords.x, baseH, cell.currentCoords.z);
+                    drawInkLine(base, top, 1.6, 4, 0.7);
+                }
+            });
+
+            // เรนเดอร์ยอดฉัตรที่กำลังหายใจ
+            const tip = project(spireCell.currentCoords.x, spireCell.currentCoords.y, spireCell.currentCoords.z);
+            const baseSpire = project(0, upperRidgeH, -50);
+            drawInkLine(baseSpire, tip, 2.2, 6, 1.0);
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        renderLoop();
+    </script>
+</body>
+</html>
