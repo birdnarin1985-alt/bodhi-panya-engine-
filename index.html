@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bodhi-Panya - Workshop #1: The 50-Unit Foundation</title>
+    <style>
+        body { margin: 0; background: #f7f6f0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="engineCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            render();
+        }
+        window.addEventListener('resize', resize);
+
+        // ==========================================
+        // 🎯 1. ORIGIN & ISOMETRIC PROJECTION
+        // ==========================================
+        function project(x, y, z) {
+            const angle = Math.PI / 6; // Isometric 30 องศา
+            const scale = 2.5; // ขยายขนาดให้สังเกตรายละเอียดได้ชัดเจน
+
+            const isoX = (x - z) * Math.cos(angle);
+            const isoY = -(y + (x + z) * Math.sin(angle));
+
+            const screenX = (isoX * scale) + (canvas.width / 2);
+            const screenY = (isoY * scale) + (canvas.height / 2);
+
+            return { x: screenX, y: screenY };
+        }
+
+        // ==========================================
+        // 🧱 2. MEMORY BUFFER: ลูกบาศก์ 50 หน่วย (จุดศูนย์กลางอยู่ที่ 0,0,0)
+        // ==========================================
+        const halfSize = 25; // กระจายฝั่งละ 25 หน่วย รวมเป็น 50
+        const height = 50;
+
+        const V = {
+            b0: { x: -halfSize, y: 0,      z: -halfSize }, // ฐาน หลัง-ซ้าย
+            b1: { x:  halfSize, y: 0,      z: -halfSize }, // ฐาน หลัง-ขวา
+            b2: { x:  halfSize, y: 0,      z:  halfSize }, // ฐาน หน้า-ขวา
+            b3: { x: -halfSize, y: 0,      z:  halfSize }, // ฐาน หน้า-ซ้าย
+
+            t0: { x: -halfSize, y: height, z: -halfSize }, // ยอด หลัง-ซ้าย
+            t1: { x:  halfSize, y: height, z: -halfSize }, // ยอด หลัง-ขวา
+            t2: { x:  halfSize, y: height, z:  halfSize }, // ยอด หน้า-ขวา
+            t3: { x: -halfSize, y: height, z:  halfSize }  // ยอด หน้า-ซ้าย
+        };
+
+        const faces = [
+            { id: 'bottom',     vertices: [V.b0, V.b1, V.b2, V.b3], color: 'rgba(200, 200, 200, 0.4)' },
+            { id: 'top',        vertices: [V.t0, V.t1, V.t2, V.t3], color: 'rgba(240, 230, 210, 0.6)' },
+            { id: 'back-left',  vertices: [V.b0, V.b1, V.t1, V.t0], color: 'rgba(180, 170, 160, 0.4)' },
+            { id: 'back-right', vertices: [V.b1, V.b2, V.t2, V.t1], color: 'rgba(160, 150, 140, 0.4)' },
+            { id: 'front-left', vertices: [V.b0, V.b3, V.t3, V.t0], color: 'rgba(210, 195, 175, 0.5)' },
+            { id: 'front-right',vertices: [V.b3, V.b2, V.t2, V.t3], color: 'rgba(225, 210, 190, 0.5)' }
+        ];
+
+        // ==========================================
+        // 📐 3. RENDER PIPELINE
+        // ==========================================
+        function drawAxis(p1, p2, color, text) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            if (text) {
+                ctx.fillStyle = color;
+                ctx.font = 'bold 12px monospace';
+                ctx.fillText(text, p2.x + 5, p2.y + 5);
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Crosshair กลางจอ
+            ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0); ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.moveTo(0, canvas.height / 2); ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+
+            // 2. แกนอ้างอิง X, Y, Z
+            const origin = project(0, 0, 0);
+            drawAxis(origin, project(60, 0, 0), '#ff4444', 'X+');
+            drawAxis(origin, project(0, 70, 0), '#44aa44', 'Y+');
+            drawAxis(origin, project(0, 0, 60), '#4444ff', 'Z+');
+
+            // 3. Depth Sorting (คำนวณระยะเฉลี่ยเพื่อเรียงลำดับการวาด)
+            faces.forEach(face => {
+                let zSum = 0;
+                face.vertices.forEach(v => zSum += (v.x + v.y + v.z));
+                face.zDepth = zSum / face.vertices.length;
+            });
+            faces.sort((a, b) => a.zDepth - b.zDepth);
+
+            // 4. วาดแผ่นระนาบตามลำดับความลึก
+            faces.forEach(face => {
+                const pts = face.vertices.map(v => project(v.x, v.y, v.z));
+
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                ctx.closePath();
+
+                ctx.fillStyle = face.color;
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(50, 40, 30, 0.7)';
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+            });
+
+            // 5. จุด Origin Marker
+            ctx.beginPath();
+            ctx.arc(origin.x, origin.y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#000';
+            ctx.fill();
+        }
+
+        resize();
+    </script>
+</body>
+</html>
