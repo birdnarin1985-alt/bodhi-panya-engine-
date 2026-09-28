@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bodhi-Panya Engine - Human Anatomy & X-Ray Slicing Suite</title>
+    <style>
+        body {
+            margin: 0;
+            background: #f4f1ea;
+            overflow: hidden;
+            font-family: 'Sarabun', sans-serif;
+            user-select: none;
+        }
+        canvas { display: block; }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            background: rgba(255, 255, 255, 0.94);
+            padding: 18px 24px;
+            border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+            pointer-events: none;
+            max-width: 410px;
+            border-left: 5px solid #d4a373;
+        }
+        h1 { margin: 0 0 6px 0; font-size: 17px; color: #2c241d; font-weight: 600; }
+        p { margin: 0; font-size: 12px; color: #6b5b52; line-height: 1.5; }
+        .badge {
+            display: inline-block;
+            margin-top: 10px;
+            background: #faedcd;
+            color: #8c6d46;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            letter-spacing: 0.8px;
+        }
+
+        #control-panel {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.94);
+            padding: 18px;
+            border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+            width: 280px;
+        }
+        .control-group-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #2c241d;
+            margin-bottom: 4px;
+            border-bottom: 1px solid #e6e2d6;
+            padding-bottom: 4px;
+        }
+        .mode-btn {
+            background: #f4f1ea;
+            color: #2c241d;
+            border: 1px solid #d4a373;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-family: 'Sarabun', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+        }
+        .mode-btn:hover, .mode-btn.active {
+            background: #2c241d;
+            color: #f4f1ea;
+            border-color: #2c241d;
+        }
+        #slider-box {
+            font-size: 11px;
+            color: #6b5b52;
+            margin-top: 4px;
+        }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #d4a373; margin-top: 6px; }
+    </style>
+</head>
+<body>
+
+    <div id="control-panel">
+        <div class="control-group-title">👤 Human Anatomy Controls</div>
+        <button class="mode-btn" id="btn-xray" onclick="setMode('xray')">🧬 1. โครงกระดูกมนุษย์ (X-Ray)</button>
+        <button class="mode-btn active" id="btn-flesh" onclick="setMode('flesh')">👔 2. ผิวหนัง & เสื้อผ้า (Full Flesh)</button>
+        <button class="mode-btn" id="btn-slice" onclick="setMode('slice')">✂️ 3. ภาพตัดเอ็กซเรย์ (Cross-Section)</button>
+        
+        <div id="slider-box">
+            <label for="sliceSlider">แกนภาพตัด (X-Ray Slicing): <span id="sliceVal">1.00</span></label><br>
+            <input type="range" id="sliceSlider" min="-1" max="1" step="0.05" value="1.0" oninput="onSliceSlider(this.value)">
+        </div>
+    </div>
+
+    <canvas id="engineCanvas"></canvas>
+
+    <div id="ui-overlay">
+        <h1>Bodhi-Panya Engine</h1>
+        <p>ระบบจำลองกายวิภาคและโครงสร้างมนุษย์มีชีวิต ขับเคลื่อนด้วย Linked List Cells พร้อมฟังก์ชันภาพตัดเอ็กซเรย์ (Cross-Section Slicing)</p>
+        <div class="badge">HUMAN ANATOMY & X-RAY SUITE FOR DR. JIMMY</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let currentMode = 'flesh'; // 'xray' | 'flesh' | 'slice'
+        let sliceDepth = 1.0;
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`btn-${mode}`).classList.add('active');
+
+            const slider = document.getElementById('sliceSlider');
+            if (mode === 'slice') {
+                slider.disabled = false;
+            } else {
+                slider.disabled = true;
+                sliceDepth = 1.0;
+            }
+        }
+
+        function onSliceSlider(val) {
+            sliceDepth = parseFloat(val);
+            document.getElementById('sliceVal').innerText = sliceDepth.toFixed(2);
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 1. Human Cellular Node with Breath & Depth
+        class HumanCell {
+            constructor(id, x, y, z) {
+                this.id = id;
+                this.ox = x; this.oy = y; this.oz = z;
+                this.x = x; this.y = y; this.z = z;
+                this.phase = Math.random() * Math.PI * 2;
+                this.speed = 0.04;
+                this.amplitude = 0.25;
+            }
+
+            update(time) {
+                this.phase += this.speed;
+                // ลมหายใจขยายซี่โครงเบาๆ
+                if (this.id.includes('chest') || this.id.includes('rib')) {
+                    this.x = this.ox + Math.sin(this.phase + time) * this.amplitude;
+                } else {
+                    this.x = this.ox;
+                }
+                this.y = this.oy;
+                this.z = this.oz;
+            }
+        }
+
+        // 2. สร้างโครงสร้างกายวิภาคมนุษย์ (Human Skeleton & Flesh)
+        const nodesMap = new Map();
+        const skeletonLines = [];
+        const fleshPolygons = [];
+
+        function addNode(id, x, y, z) {
+            if (!nodesMap.has(id)) {
+                nodesMap.set(id, new HumanCell(id, x, y, z));
+            }
+            return nodesMap.get(id);
+        }
+
+        // กะโหลกและศีรษะ
+        const headTop = addNode('head_top', 0, 110, 0);
+        const headChin = addNode('head_chin', 0, 75, 0);
+        const neck = addNode('neck', 0, 65, 0);
+
+        // ไหล่และลำตัว / ซี่โครง
+        const lShoulder = addNode('l_shoulder', -22, 55, 0);
+        const rShoulder = addNode('r_shoulder', 22, 55, 0);
+        const chestL = addNode('chest_l', -15, 35, 5);
+        const chestR = addNode('chest_r', 15, 35, 5);
+        const spineMid = addNode('spine_mid', 0, 20, 0);
+        const pelvisL = addNode('pelvis_l', -12, -25, 0);
+        const pelvisR = addNode('pelvis_r', 12, -25, 0);
+
+        // แขน
+        const lElbow = addNode('l_elbow', -32, 10, 0);
+        const lHand  = addNode('l_hand', -38, -35, 0);
+        const rElbow = addNode('r_elbow', 32, 10, 0);
+        const rHand  = addNode('r_hand', 38, -35, 0);
+
+        // ขา
+        const lKnee = addNode('l_knee', -14, -75, 0);
+        const lFoot = addNode('l_foot', -16, -125, 0);
+        const rKnee = addNode('r_knee', 14, -75, 0);
+        const rFoot = addNode('r_foot', 16, -125, 0);
+
+        // โครงกระดูกเส้น (Skeleton Bones)
+        const bones = [
+            { p1: headTop, p2: headChin, w: 3.5 },
+            { p1: headChin, p2: neck, w: 2.5 },
+            { p1: neck, p2: spineMid, w: 3.0 },
+            { p1: spineMid, p2: pelvisL, w: 2.5 },
+            { p1: spineMid, p2: pelvisR, w: 2.5 },
+            { p1: neck, p2: lShoulder, w: 2.5 },
+            { p1: lShoulder, p2: lElbow, w: 2.8 },
+            { p1: lElbow, p2: lHand, w: 2.2 },
+            { p1: neck, p2: rShoulder, w: 2.5 },
+            { p1: rShoulder, p2: rElbow, w: 2.8 },
+            { p1: rElbow, p2: rHand, w: 2.2 },
+            { p1: pelvisL, p2: lKnee, w: 3.2 },
+            { p1: lKnee, p2: lFoot, w: 2.8 },
+            { p1: pelvisR, p2: rKnee, w: 3.2 },
+            { p1: rKnee, p2: rFoot, w: 2.8 },
+            { p1: lShoulder, p2: chestL, w: 2.0 },
+            { p1: rShoulder, p2: chestR, w: 2.0 },
+            { p1: chestL, p2: spineMid, w: 2.0 },
+            { p1: chestR, p2: spineMid, w: 2.0 }
+        ];
+
+        // ผิวหนังและเสื้อผ้า (Full Flesh & Clothes)
+        const fleshes = [
+            { nodes: [headTop, headChin, neck, lShoulder], color: 'rgba(235, 190, 150, 0.85)', type: 'skin' },
+            { nodes: [lShoulder, rShoulder, chestR, chestL], color: 'rgba(50, 110, 190, 0.88)', type: 'shirt' }, // เสื้อสูท/เสื้อเชิ้ตสีฟ้า
+            { nodes: [chestL, chestR, pelvisR, pelvisL], color: 'rgba(50, 110, 190, 0.88)', type: 'shirt' },
+            { nodes: [pelvisL, pelvisR, lKnee, rKnee], color: 'rgba(40, 50, 65, 0.88)', type: 'pants' } // กางเกงสีเข้ม
+        ];
+
+        // 3. Projection & Ink Stylizer
+        function project(x, y, z) {
+            const scale = 1.3;
+            return {
+                x: (x * scale) + (canvas.width / 2),
+                y: -(y * scale) + (canvas.height / 2) + 20,
+                z: z
+            };
+        }
+
+        function drawInkLine(p1, p2, width = 2.0) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = '#2c241d';
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+        }
+
+        let globalTime = 0;
+
+        // 4. Main Render Loop
+        function renderLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            globalTime += 0.035;
+
+            nodesMap.forEach(node => node.update(globalTime));
+
+            // เรนเดอร์ผิวหนังและเสื้อผ้า (ถ้าไม่ใช่โหมด X-Ray ล้วน)
+            if (currentMode === 'flesh' || currentMode === 'slice') {
+                fleshes.forEach(f => {
+                    // หากอยู่ในโหมด Slice จะเช็คระนาบตัด
+                    if (currentMode === 'slice') {
+                        const avgZ = f.nodes.reduce((acc, n) => acc + n.z, 0) / f.nodes.length;
+                        if (avgZ > sliceDepth * 15) return; // ตัดภาพตามสไลเดอร์
+                    }
+
+                    const pts = f.nodes.map(n => project(n.x, n.y, n.z));
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0].x, pts[0].y);
+                    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                    ctx.closePath();
+                    ctx.fillStyle = f.color;
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(44, 36, 29, 0.3)';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                });
+            }
+
+            // เรนเดอร์โครงกระดูก (Skeleton Bones)
+            bones.forEach(bone => {
+                const p1 = project(bone.p1.x, bone.p1.y, bone.p1.z);
+                const p2 = project(bone.p2.x, bone.p2.y, bone.p2.z);
+
+                if (currentMode === 'slice') {
+                    const avgZ = (bone.p1.z + bone.p2.z) / 2;
+                    if (avgZ > sliceDepth * 15) return;
+                }
+
+                const alphaW = (currentMode === 'flesh') ? bone.w * 0.45 : bone.w;
+                drawInkLine(p1, p2, alphaW);
+            });
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        renderLoop();
+    </script>
+</body>
+</html>
