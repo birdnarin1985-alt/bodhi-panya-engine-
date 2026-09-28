@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bodhi-Panya - Ink & Watercolor Stylizer Test</title>
+    <style>
+        body { margin: 0; background: #f6f4ee; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="engineCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            render();
+        }
+        window.addEventListener('resize', resize);
+
+        // ==========================================
+        // 🎯 1. ISOMETRIC PROJECTION
+        // ==========================================
+        function project(x, y, z) {
+            const angle = Math.PI / 6; 
+            const scale = 2.4;
+
+            const isoX = (x - z) * Math.cos(angle);
+            const isoY = -(y + (x + z) * Math.sin(angle));
+
+            const screenX = (isoX * scale) + (canvas.width / 2);
+            const screenY = (isoY * scale) + (canvas.height / 2);
+
+            return { x: screenX, y: screenY };
+        }
+
+        // ==========================================
+        // 🧱 2. GEOMETRY BUFFER (ก้อนทดสอบระบบเส้น)
+        // ==========================================
+        const halfSize = 25;
+        const height = 50;
+
+        const V = {
+            b0: { x: -halfSize, y: 0,      z: -halfSize },
+            b1: { x:  halfSize, y: 0,      z: -halfSize },
+            b2: { x:  halfSize, y: 0,      z:  halfSize },
+            b3: { x: -halfSize, y: 0,      z:  halfSize },
+
+            t0: { x: -halfSize, y: height, z: -halfSize },
+            t1: { x:  halfSize, y: height, z: -halfSize },
+            t2: { x:  halfSize, y: height, z:  halfSize },
+            t3: { x: -halfSize, y: height, z:  halfSize }
+        };
+
+        const faces = [
+            { id: 'top',        vertices: [V.t0, V.t1, V.t2, V.t3], fillAccent: 'rgba(230, 140, 40, 0.35)', hatch: false },
+            { id: 'front-left', vertices: [V.b0, V.b3, V.t3, V.t0], fillAccent: null, hatch: true, hatchAngle: 0.5 },
+            { id: 'front-right',vertices: [V.b3, V.b2, V.t2, V.t3], fillAccent: null, hatch: false }
+        ];
+
+        // ==========================================
+        // 🖌️ 3. STYLIZER FUNCTIONS (ฟังก์ชันแปลงเส้นหมึกมือ)
+        // ==========================================
+        
+        // ฟังก์ชันลากเส้นหมึกตวัดสด มี Jitter และยื่นเลยขอบ (Over-shooting)
+        function drawInkLine(p1, p2, width = 1.3, overShoot = 6, jitter = 1.2) {
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const len = Math.hypot(dx, dy);
+            if (len === 0) return;
+
+            const uX = dx / len;
+            const uY = dy / len;
+
+            // ต่อเส้นเลยหัว-ท้ายเลียนแบบการตวัดมือสถาปนิก
+            const startX = p1.x - (uX * overShoot);
+            const startY = p1.y - (uY * overShoot);
+            const endX   = p2.x + (uX * overShoot);
+            const endY   = p2.y + (uY * overShoot);
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+
+            // ซอยจุดกึ่งกลางเส้นเพื่อใส่ความสั่นของหมึกธรรมชาติ
+            const steps = Math.max(3, Math.floor(len / 18));
+            for (let i = 1; i <= steps; i++) {
+                const t = i / steps;
+                const randJitterX = (Math.random() - 0.5) * jitter;
+                const randJitterY = (Math.random() - 0.5) * jitter;
+                const curX = startX + (endX - startX) * t + randJitterX;
+                const curY = startY + (endY - startY) * t + randJitterY;
+                ctx.lineTo(curX, curY);
+            }
+
+            ctx.strokeStyle = '#1e1c1a'; // สีหมึกดำธรรมชาติ
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+        }
+
+        // ฟังก์ชันแรเงาสานเส้น (Cross-Hatch) ลงบนระนาบ
+        function drawFaceHatching(pts, density = 7) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+            ctx.closePath();
+            ctx.clip(); // ตีกรอบเฉพาะภายในระนาบ
+
+            ctx.strokeStyle = 'rgba(30, 28, 25, 0.45)';
+            ctx.lineWidth = 0.9;
+
+            let minX = Math.min(...pts.map(p => p.x));
+            let maxX = Math.max(...pts.map(p => p.x));
+            let minY = Math.min(...pts.map(p => p.y));
+            let maxY = Math.max(...pts.map(p => p.y));
+
+            // ขีดเส้นเฉียงทำเงา
+            for (let x = minX - (maxY - minY); x < maxX; x += density) {
+                ctx.beginPath();
+                ctx.moveTo(x, minY);
+                ctx.lineTo(x + (maxY - minY), maxY);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // ==========================================
+        // 🚀 4. RENDER PIPELINE
+        // ==========================================
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // เรียงลำดับความลึก
+            faces.forEach(face => {
+                let zSum = 0;
+                face.vertices.forEach(v => zSum += (v.x + v.y + v.z));
+                face.zDepth = zSum / face.vertices.length;
+            });
+            faces.sort((a, b) => a.zDepth - b.zDepth);
+
+            // 1. แต้มสีน้ำและสานเส้นแรเงา (Watercolor & Hatch Pass)
+            faces.forEach(face => {
+                const pts = face.vertices.map(v => project(v.x, v.y, v.z));
+
+                if (face.fillAccent) {
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0].x, pts[0].y);
+                    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                    ctx.closePath();
+                    ctx.fillStyle = face.fillAccent;
+                    ctx.fill();
+                }
+
+                if (face.hatch) {
+                    drawFaceHatching(pts, 6);
+                }
+            });
+
+            // 2. ขีดเส้นโครงสร้างหมึกสดทับด้านบน (Ink Outline Pass)
+            faces.forEach(face => {
+                const pts = face.vertices.map(v => project(v.x, v.y, v.z));
+                for (let i = 0; i < pts.length; i++) {
+                    const next = (i + 1) % pts.length;
+                    drawInkLine(pts[i], pts[next], 1.4, 5, 1.0);
+                }
+            });
+
+            // จุด Origin เพื่อยืนยันความแม่นยำ
+            const origin = project(0, 0, 0);
+            ctx.beginPath();
+            ctx.arc(origin.x, origin.y, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#b45309';
+            ctx.fill();
+        }
+
+        resize();
+    </script>
+</body>
+</html>
