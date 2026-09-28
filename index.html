@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bodhi-Panya Engine - Calculus Cellular Anatomy</title>
+    <style>
+        body {
+            margin: 0;
+            background: #0a0a0a; /* ห้วงอวกาศอันว่างเปล่า */
+            overflow: hidden;
+            font-family: 'Sarabun', sans-serif;
+            user-select: none;
+            touch-action: none;
+        }
+        canvas { display: block; }
+        
+        #ui-overlay {
+            position: absolute;
+            bottom: 24px;
+            left: 24px;
+            background: rgba(10, 10, 10, 0.7);
+            padding: 18px 24px;
+            border-radius: 12px;
+            border-left: 4px solid #00ffcc;
+            pointer-events: none;
+            max-width: 380px;
+            color: #e0e0e0;
+            box-shadow: 0 4px 30px rgba(0, 255, 204, 0.15);
+            backdrop-filter: blur(5px);
+        }
+        h1 { margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #00ffcc; letter-spacing: 1px; }
+        p { margin: 0; font-size: 12px; line-height: 1.6; color: #a0a0a0; }
+        .highlight { color: #e0b471; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <canvas id="engineCanvas"></canvas>
+
+    <div id="ui-overlay">
+        <h1>Bodhi-Panya : Calculus Linked-List</h1>
+        <p>สร้างรูปทรงด้วย <span class="highlight">Integration (การรวมตัว)</span><br>
+        ลูบสัมผัสหน้าจอเพื่อ <span class="highlight">Differentiation (การแตกสลายเป็นกลาปะ)</span><br>
+        สัมผัสยันต์ตรงกลางอกเพื่อปล่อยคลื่นพลังงานผ่านสายใยเซลล์</p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 1. ตัวแปรสำหรับ Living Touch & Differentiation
+        let pointer = { x: -1000, y: -1000, active: false };
+        let yantCenter = { x: 0, y: 0, radius: 40 };
+
+        function updatePointer(e) {
+            pointer.x = e.clientX || (e.touches && e.touches[0].clientX);
+            pointer.y = e.clientY || (e.touches && e.touches[0].clientY);
+        }
+
+        canvas.addEventListener('mousedown', (e) => { pointer.active = true; updatePointer(e); triggerYantRipple(); });
+        canvas.addEventListener('mousemove', (e) => { if(pointer.active) updatePointer(e); });
+        window.addEventListener('mouseup', () => { pointer.active = false; pointer.x = -1000; });
+        
+        canvas.addEventListener('touchstart', (e) => { pointer.active = true; updatePointer(e); triggerYantRipple(); }, {passive: true});
+        canvas.addEventListener('touchmove', (e) => { if(pointer.active) updatePointer(e); }, {passive: true});
+        window.addEventListener('touchend', () => { pointer.active = false; pointer.x = -1000; });
+
+        // 2. โครงสร้าง Linked List สำหรับ "เซลล์กระดูก (Osteo-Node)"
+        class OsteoNode {
+            constructor(x, y, z, type) {
+                this.ox = x; this.oy = y; this.oz = z; // พิกัด Integration (จุดสมดุล)
+                this.x = x + (Math.random() - 0.5) * 500; // เกิดมาแบบสุ่ม (Entropy)
+                this.y = y + (Math.random() - 0.5) * 500;
+                this.vx = 0; this.vy = 0; // ความเร็วของเซลล์
+                this.type = type; // 'skull', 'spine', 'rib'
+                this.next = null; // สายใย Linked List
+                this.energy = 0; // พลังงานแสง
+            }
+
+            update(globalTime) {
+                // A. Integration Force (แรงดึงดูดกลับสู่สมดุล - รักษารูปทรง)
+                let dx = this.ox - this.x;
+                let dy = this.oy - this.y;
+                
+                // คลื่นลมหายใจ 4 มิติ
+                let breath = Math.sin(globalTime * 2 + this.oy * 0.05) * 2;
+                if(this.type === 'rib') dx += breath;
+
+                this.vx += dx * 0.02; // Spring constant
+                this.vy += dy * 0.02;
+
+                // B. Differentiation Force (แรงผลักเมื่อถูกสัมผัส)
+                if (pointer.active) {
+                    let tx = this.x - pointer.x;
+                    let ty = this.y - pointer.y;
+                    let dist = Math.sqrt(tx*tx + ty*ty);
+                    if (dist < 120) { // รัศมีการลูบ
+                        let force = (120 - dist) / 120;
+                        this.vx += (tx / dist) * force * 15; // ดิฟให้แตกสลาย
+                        this.vy += (ty / dist) * force * 15;
+                        this.energy = 1.0; // สว่างวาบเมื่อโดนสัมผัส
+                    }
+                }
+
+                // C. Entanglement (ส่งต่อพลังงานใน Linked List)
+                if (this.next) {
+                    // ดึงดูดกับเซลล์ถัดไปเล็กน้อย
+                    this.vx += (this.next.x - this.x) * 0.005;
+                    this.vy += (this.next.y - this.y) * 0.005;
+                    // ส่งต่อคลื่นพลังงานแสง (Energy Transfer)
+                    if (this.energy > 0.1 && this.next.energy < this.energy) {
+                        this.next.energy = this.energy * 0.9;
+                    }
+                }
+
+                // D. ฟิสิกส์การเคลื่อนที่
+                this.vx *= 0.82; // แรงเสียดทาน (Friction)
+                this.vy *= 0.82;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.energy *= 0.95; // ค่อยๆ ดับแสงลง
+            }
+        }
+
+        // 3. สร้างเครือข่าย 3,000 เซลล์ (The 53D Generation)
+        let headNode = null;
+        let tailNode = null;
+        let totalCells = 3000;
+
+        function addCell(x, y, z, type) {
+            let newNode = new OsteoNode(x, y, z, type);
+            if (!headNode) {
+                headNode = newNode;
+                tailNode = newNode;
+            } else {
+                tailNode.next = newNode; // ผูก Linked List
+                tailNode = newNode;
+            }
+        }
+
+        function initAnatomy() {
+            let cx = window.innerWidth / 2;
+            let cy = window.innerHeight / 2 - 100;
+            
+            yantCenter.x = cx;
+            yantCenter.y = cy + 180; // ตำแหน่งกลางอก
+
+            // กะโหลก (Skull - Point Cloud)
+            for (let i = 0; i < 600; i++) {
+                let angle = Math.random() * Math.PI * 2;
+                let r = Math.sqrt(Math.random()) * 45; // รัศมีทรงกลม
+                let px = cx + Math.cos(angle) * r;
+                let py = cy - 50 + Math.sin(angle) * r * 1.2;
+                addCell(px, py, 0, 'skull');
+            }
+
+            // กระดูกสันหลัง (Spine)
+            for (let i = 0; i < 400; i++) {
+                let px = cx + (Math.random() - 0.5) * 10;
+                let py = cy + 20 + Math.random() * 300; // ทอดยาวลงมา
+                addCell(px, py, 0, 'spine');
+            }
+
+            // ซี่โครง (Ribcage)
+            for (let i = 0; i < 2000; i++) {
+                let yOffset = Math.random() * 200;
+                // สมการเส้นโค้งอินทิเกรตสร้างซี่โครง
+                let ribWidth = Math.sin((yOffset / 200) * Math.PI) * 70; 
+                let px = cx + (Math.random() > 0.5 ? 1 : -1) * (Math.random() * ribWidth);
+                let py = cy + 40 + yOffset;
+                addCell(px, py, 0, 'rib');
+            }
+        }
+        initAnatomy();
+
+        // 4. ระบบ Yant UI & คลื่นช็อกเวฟ
+        function triggerYantRipple() {
+            let dx = pointer.x - yantCenter.x;
+            let dy = pointer.y - yantCenter.y;
+            if (Math.sqrt(dx*dx + dy*dy) < yantCenter.radius) {
+                // หากแตะโดนยันต์กลางอก ปล่อยคลื่นพลังงานใส่โหนดแรก (Head Node)
+                headNode.energy = 2.0;
+                headNode.vx += (Math.random()-0.5) * 100;
+                headNode.vy += (Math.random()-0.5) * 100;
+            }
+        }
+
+        function drawYant(ctx, x, y, time) {
+            ctx.beginPath();
+            ctx.arc(x, y, yantCenter.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(224, 180, 113, ${0.3 + Math.sin(time*3)*0.2})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // ตาข่ายเกราะเพชร (ลวดลายเรขาคณิต)
+            let sides = 8;
+            ctx.beginPath();
+            for(let i=0; i<=sides; i++) {
+                let angle = (i/sides) * Math.PI * 2 + time;
+                let px = x + Math.cos(angle) * (yantCenter.radius - 5);
+                let py = y + Math.sin(angle) * (yantCenter.radius - 5);
+                if(i===0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.strokeStyle = '#e0b471';
+            ctx.stroke();
+        }
+
+        // 5. Main Render Loop
+        let globalTime = 0;
+
+        function renderLoop() {
+            // สร้างเอฟเฟกต์ Motion Blur (วาดพื้นหลังแบบโปร่งแสงทับ)
+            ctx.fillStyle = 'rgba(10, 10, 10, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            globalTime += 0.02;
+
+            // วาด Living UI ยันต์ตรงกลางอก
+            drawYant(ctx, yantCenter.x, yantCenter.y, globalTime);
+
+            ctx.lineWidth = 1;
+            
+            // ลูปอัปเดตและวาด Linked List (Cellular Nodes)
+            let current = headNode;
+            while (current) {
+                current.update(globalTime);
+
+                // คำนวณสีและการเรืองแสง (Color & Glow)
+                let baseColor = current.type === 'skull' ? '180, 220, 255' : (current.type === 'spine' ? '224, 180, 113' : '150, 200, 200');
+                let alpha = 0.4 + (current.energy * 0.6);
+                
+                // วาดเซลล์ (จุดกลาปะ)
+                ctx.beginPath();
+                ctx.arc(current.x, current.y, 1.5 + (current.energy * 2), 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(${baseColor}, ${alpha})`;
+                ctx.fill();
+
+                // วาดเส้นสายใย Linked List (53D Connection) 
+                // แสดงผลเฉพาะเซลล์ที่มีพลังงานหรืออยู่ใกล้กันเพื่อประหยัดประสิทธิภาพ
+                if (current.next && (current.energy > 0.05 || Math.random() < 0.05)) {
+                    ctx.beginPath();
+                    ctx.moveTo(current.x, current.y);
+                    ctx.lineTo(current.next.x, current.next.y);
+                    ctx.strokeStyle = `rgba(${baseColor}, ${alpha * 0.5})`;
+                    ctx.stroke();
+                }
+
+                current = current.next;
+            }
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        renderLoop();
+    </script>
+</body>
+</html>
