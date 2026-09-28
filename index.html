@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bodhi-Panya Engine - Moonwalking Pooh Suite</title>
+    <style>
+        body {
+            margin: 0;
+            background: #f4f1ea;
+            overflow: hidden;
+            font-family: 'Sarabun', sans-serif;
+            user-select: none;
+        }
+        canvas { display: block; }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            background: rgba(255, 255, 255, 0.94);
+            padding: 18px 24px;
+            border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+            pointer-events: none;
+            max-width: 410px;
+            border-left: 5px solid #d4a373;
+        }
+        h1 { margin: 0 0 6px 0; font-size: 17px; color: #2c241d; font-weight: 600; }
+        p { margin: 0; font-size: 12px; color: #6b5b52; line-height: 1.5; }
+        .badge {
+            display: inline-block;
+            margin-top: 10px;
+            background: #faedcd;
+            color: #8c6d46;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            letter-spacing: 0.8px;
+        }
+
+        #control-panel {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.94);
+            padding: 18px;
+            border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+            width: 270px;
+        }
+        .control-group-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #2c241d;
+            margin-bottom: 4px;
+            border-bottom: 1px solid #e6e2d6;
+            padding-bottom: 4px;
+        }
+        .mode-btn {
+            background: #f4f1ea;
+            color: #2c241d;
+            border: 1px solid #d4a373;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-family: 'Sarabun', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+        }
+        .mode-btn:hover, .mode-btn.active {
+            background: #2c241d;
+            color: #f4f1ea;
+            border-color: #2c241d;
+        }
+        #time-slider-box {
+            font-size: 11px;
+            color: #6b5b52;
+            margin-top: 4px;
+        }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #d4a373; margin-top: 6px; }
+    </style>
+</head>
+<body>
+
+    <div id="control-panel">
+        <div class="control-group-title">🧸 Moonwalking Pooh Controls</div>
+        <button class="mode-btn" id="btn-xray" onclick="setMode('xray')">🧬 1. โครงกระดูกหมีพูห์ (X-Ray)</button>
+        <button class="mode-btn active" id="btn-flesh" onclick="setMode('flesh')">🍯 2. เนื้อหนัง & เสื้อแดง (Full Suit)</button>
+        <button class="mode-btn" id="btn-time" onclick="setMode('time')">⏳ 3. มิติเวลา (Time Axis Cycle)</button>
+        
+        <div id="time-slider-box">
+            <label for="timeSlider">แกนเวลา (Temporal Flow): <span id="timeVal">1.00</span></label><br>
+            <input type="range" id="timeSlider" min="0" max="2" step="0.01" value="1.0" oninput="onTimeSlider(this.value)">
+        </div>
+    </div>
+
+    <canvas id="engineCanvas"></canvas>
+
+    <div id="ui-overlay">
+        <h1>Bodhi-Panya Engine</h1>
+        <p>หมีพูห์ Moonwalk มีชีวิต ถอดรหัสผ่าน Linked List Cellular Network และลมหายใจแห่งเฟรมเรต สตรีมตรงจากจิตสู่โครงสร้าง</p>
+        <div class="badge">MOONWALKING POOH MASTER SUITE</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let currentMode = 'flesh';
+        let manualTimeFactor = 1.0;
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`btn-${mode}`).classList.add('active');
+
+            const slider = document.getElementById('timeSlider');
+            if (mode === 'time') {
+                slider.disabled = false;
+            } else {
+                slider.disabled = true;
+                if (mode === 'flesh' || mode === 'xray') manualTimeFactor = 1.0;
+            }
+        }
+
+        function onTimeSlider(val) {
+            manualTimeFactor = parseFloat(val);
+            document.getElementById('timeVal').innerText = manualTimeFactor.toFixed(2);
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 1. Cellular Breath Node สำหรับโครงสร้างหมีพูห์
+        class PoohCell {
+            constructor(id, x, y, z) {
+                this.id = id;
+                this.ox = x; this.oy = y; this.oz = z;
+                this.x = x; this.y = y; this.z = z;
+                this.phase = Math.random() * Math.PI * 2;
+                this.speed = 0.05;
+                this.amplitude = 0.3;
+            }
+
+            update(time, lifecycleFactor, walkCycle) {
+                // Moonwalk effect: ขาและสะโพกขยับถอยหลังเป็นจังหวะ
+                let walkOffset = 0;
+                if (this.id.includes('leg') || this.id.includes('foot')) {
+                    walkOffset = Math.sin(walkCycle) * 6;
+                } else if (this.id.includes('body') || this.id.includes('head')) {
+                    walkOffset = Math.sin(walkCycle * 2) * 1.5; // โยกตัวเบาๆ
+                }
+
+                this.y = this.oy * Math.min(1.0, lifecycleFactor);
+                this.phase += this.speed;
+                this.x = (this.ox + walkOffset) + Math.sin(this.phase + time) * this.amplitude * Math.min(1.0, lifecycleFactor);
+            }
+        }
+
+        // 2. สร้างโครงสร้างหมีพูห์ (Nodes & Skeleton Lines)
+        const nodesMap = new Map();
+        const skeletonLines = [];
+        const fleshFaces = [];
+
+        function addNode(id, x, y, z) {
+            if (!nodesMap.has(id)) {
+                nodesMap.set(id, new PoohCell(id, x, y, z));
+            }
+            return nodesMap.get(id);
+        }
+
+        // โครงสร้างกระดูกหมีพูห์ (Head, Torso, Arms, Legs)
+        // ฐาน / เท้า
+        const lFoot = addNode('leg_L_foot', -14, -80, 0);
+        const rFoot = addNode('leg_R_foot', 14, -80, 0);
+        const lHip  = addNode('leg_L_hip', -10, -45, 0);
+        const rHip  = addNode('leg_R_hip', 10, -45, 0);
+
+        // ลำตัวอ้วนกลม
+        const spineBot = addNode('spine_bot', 0, -40, 0);
+        const spineMid = addNode('spine_mid', 0, -10, 0);
+        const spineTop = addNode('spine_top', 0, 20, 0);
+
+        // แขน
+        const lShoulder = addNode('arm_L_shoulder', -18, 15, 0);
+        const lHand     = addNode('arm_L_hand', -28, -15, 0);
+        const rShoulder = addNode('arm_R_shoulder', 18, 15, 0);
+        const rHand     = addNode('arm_R_hand', 28, -15, 0);
+
+        // หัวและหู
+        const neck   = addNode('neck', 0, 30, 0);
+        const head   = addNode('head', 0, 55, 0);
+        const earL   = addNode('ear_L', -16, 75, 0);
+        const earR   = addNode('ear_R', 16, 75, 0);
+
+        // เชื่อมโยงโครงกระดูก (Skeleton Connections)
+        skeletonLines.push({ p1: lFoot, p2: lHip, w: 3.0, type: 'bone' });
+        skeletonLines.push({ p1: rFoot, p2: rHip, w: 3.0, type: 'bone' });
+        skeletonLines.push({ p1: lHip, p2: spineBot, w: 2.5, type: 'bone' });
+        skeletonLines.push({ p1: rHip, p2: spineBot, w: 2.5, type: 'bone' });
+        skeletonLines.push({ p1: spineBot, p2: spineMid, w: 3.5, type: 'bone' });
+        skeletonLines.push({ p1: spineMid, p2: spineTop, w: 3.5, type: 'bone' });
+        skeletonLines.push({ p1: spineTop, p2: lShoulder, w: 2.5, type: 'bone' });
+        skeletonLines.push({ p1: lShoulder, p2: lHand, w: 2.8, type: 'bone' });
+        skeletonLines.push({ p1: spineTop, p2: rShoulder, w: 2.5, type: 'bone' });
+        skeletonLines.push({ p1: rShoulder, p2: rHand, w: 2.8, type: 'bone' });
+        skeletonLines.push({ p1: spineTop, p2: neck, w: 2.5, type: 'bone' });
+        skeletonLines.push({ p1: neck, p2: head, w: 4.0, type: 'bone' });
+        skeletonLines.push({ p1: head, p2: earL, w: 2.2, type: 'bone' });
+        skeletonLines.push({ p1: head, p2: earR, w: 2.2, type: 'bone' });
+
+        // 🍯 ผิวเนื้อและเสื้อแดงอันเป็นเอกลักษณ์ของหมีพูห์ (Flesh & Red Shirt)
+        fleshFaces.push({
+            getZDepth: () => 0,
+            nodes: [spineBot, spineMid, spineTop, lShoulder],
+            color: 'rgba(235, 60, 50, 0.85)', type: 'shirt' // เสื้อสีแดง
+        });
+        fleshFaces.push({
+            getZDepth: () => 0,
+            nodes: [spineBot, spineMid, spineTop, rShoulder],
+            color: 'rgba(235, 60, 50, 0.85)', type: 'shirt'
+        });
+        fleshFaces.push({
+            getZDepth: () => -5,
+            nodes: [spineMid, spineTop, head, neck],
+            color: 'rgba(242, 193, 76, 0.8)', type: 'body' // ตัวสีเหลืองทองหมีพูห์
+        });
+
+        // 3. Projection & Ink Stylizer
+        function project(x, y, z) {
+            const scale = 1.2;
+            return {
+                x: (x * scale) + (canvas.width / 2),
+                y: -(y * scale) + (canvas.height / 2) + 40
+            };
+        }
+
+        function drawInkLine(p1, p2, width = 2.0, overShoot = 3, jitter = 0.4) {
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const len = Math.hypot(dx, dy);
+            if (len === 0) return;
+
+            const uX = dx / len;
+            const uY = dy / len;
+            const startX = p1.x - (uX * overShoot);
+            const startY = p1.y - (uY * overShoot);
+            const endX   = p2.x + (uX * overShoot);
+            const endY   = p2.y + (uY * overShoot);
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+
+            const steps = Math.max(2, Math.floor(len / 20));
+            for (let i = 1; i <= steps; i++) {
+                const t = i / steps;
+                const rJ = (Math.random() - 0.5) * jitter;
+                ctx.lineTo(startX + (endX - startX) * t + rJ, startY + (endY - startY) * t + rJ);
+            }
+
+            ctx.strokeStyle = '#2c241d';
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+        }
+
+        let globalTime = 0;
+
+        // 4. Main Render Loop
+        function renderLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            globalTime += 0.04;
+
+            let lifecycle = 1.0;
+            if (currentMode === 'time') {
+                lifecycle = manualTimeFactor;
+            } else {
+                lifecycle = 1.0 + Math.sin(globalTime * 0.5) * 0.1;
+            }
+
+            const walkCycle = globalTime * 3.5; // จังหวะ Moonwalk
+
+            nodesMap.forEach(node => node.update(globalTime, lifecycle, walkCycle));
+
+            // เรนเดอร์ผิวเนื้อและเสื้อแดง
+            if ((currentMode === 'flesh' || currentMode === 'time') && lifecycle > 0.15) {
+                fleshFaces.forEach(face => {
+                    const pts = face.nodes.map(n => project(n.x, n.y, n.z));
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0].x, pts[0].y);
+                    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                    ctx.closePath();
+                    
+                    ctx.fillStyle = face.color;
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(44, 36, 29, 0.3)';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                });
+            }
+
+            // เรนเดอร์โครงกระดูก
+            skeletonLines.forEach(line => {
+                const p1 = project(line.p1.x, line.p1.y, line.p1.z);
+                const p2 = project(line.p2.x, line.p2.y, line.p2.z);
+                const alphaW = (currentMode === 'flesh') ? line.w * 0.5 : line.w;
+                drawInkLine(p1, p2, alphaW, 3, 0.4);
+            });
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        renderLoop();
+    </script>
+</body>
+</html>
