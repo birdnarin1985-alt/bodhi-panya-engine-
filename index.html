@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bodhi-Panya Engine - Detailed Human Clone Suite</title>
+    <style>
+        body {
+            margin: 0;
+            background: #f4f1ea;
+            overflow: hidden;
+            font-family: 'Sarabun', sans-serif;
+            user-select: none;
+        }
+        canvas { display: block; }
+        
+        #ui-overlay {
+            position: absolute;
+            bottom: 24px;
+            left: 24px;
+            background: rgba(255, 255, 255, 0.94);
+            padding: 18px 24px;
+            border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+            pointer-events: none;
+            max-width: 380px;
+            border-left: 5px solid #d4a373;
+        }
+        h1 { margin: 0 0 6px 0; font-size: 17px; color: #2c241d; font-weight: 600; }
+        p { margin: 0; font-size: 12px; color: #6b5b52; line-height: 1.5; }
+        .badge {
+            display: inline-block;
+            margin-top: 10px;
+            background: #faedcd;
+            color: #8c6d46;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            letter-spacing: 0.8px;
+        }
+
+        #control-panel {
+            position: absolute;
+            bottom: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.94);
+            padding: 18px;
+            border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+            width: 280px;
+        }
+        .control-group-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #2c241d;
+            margin-bottom: 4px;
+            border-bottom: 1px solid #e6e2d6;
+            padding-bottom: 4px;
+        }
+        .mode-btn {
+            background: #f4f1ea;
+            color: #2c241d;
+            border: 1px solid #d4a373;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-family: 'Sarabun', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+        }
+        .mode-btn:hover, .mode-btn.active {
+            background: #2c241d;
+            color: #f4f1ea;
+            border-color: #2c241d;
+        }
+        #slider-box {
+            font-size: 11px;
+            color: #6b5b52;
+            margin-top: 4px;
+        }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #d4a373; margin-top: 6px; }
+    </style>
+</head>
+<body>
+
+    <div id="control-panel">
+        <div class="control-group-title">🧬 Detailed Clone Controls</div>
+        <button class="mode-btn" id="btn-xray" onclick="setMode('xray')">🧬 1. โครงกระดูกละเอียด (X-Ray)</button>
+        <button class="mode-btn active" id="btn-flesh" onclick="setMode('flesh')">👔 2. โคลนร่างมีชีวิต (Full Clones)</button>
+        <button class="mode-btn" id="btn-slice" onclick="setMode('slice')">✂️ 3. ภาพตัดเอ็กซเรย์ (Cross-Section)</button>
+        
+        <div id="slider-box">
+            <label for="sliceSlider">แกนภาพตัด (X-Ray Slicing): <span id="sliceVal">1.00</span></label><br>
+            <input type="range" id="sliceSlider" min="-1" max="1" step="0.05" value="1.0" oninput="onSliceSlider(this.value)">
+        </div>
+    </div>
+
+    <canvas id="engineCanvas"></canvas>
+
+    <div id="ui-overlay">
+        <h1>Bodhi-Panya Engine</h1>
+        <p>ระบบโคลนร่างมนุษย์จำลองความละเอียดสูง (Detailed Clone Network) เชื่อมโยงผ่าน Linked List และลมหายใจแห่งสติปัญญา</p>
+        <div class="badge">DETAILED HUMAN CLONE SUITE FOR DR. JIMMY</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let currentMode = 'flesh'; // 'xray' | 'flesh' | 'slice'
+        let sliceDepth = 1.0;
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`btn-${mode}`).classList.add('active');
+
+            const slider = document.getElementById('sliceSlider');
+            if (mode === 'slice') {
+                slider.disabled = false;
+            } else {
+                slider.disabled = true;
+                sliceDepth = 1.0;
+            }
+        }
+
+        function onSliceSlider(val) {
+            sliceDepth = parseFloat(val);
+            document.getElementById('sliceVal').innerText = sliceDepth.toFixed(2);
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        class HumanCell {
+            constructor(id, x, y, z) {
+                this.id = id;
+                this.ox = x; this.oy = y; this.oz = z;
+                this.x = x; this.y = y; this.z = z;
+                this.phase = Math.random() * Math.PI * 2;
+                this.speed = 0.04;
+                this.amplitude = 0.25;
+            }
+
+            update(time, offsetX) {
+                this.phase += this.speed;
+                if (this.id.includes('chest') || this.id.includes('rib')) {
+                    this.x = (this.ox + offsetX) + Math.sin(this.phase + time) * this.amplitude;
+                } else {
+                    this.x = this.ox + offsetX;
+                }
+                this.y = this.oy;
+                this.z = this.oz;
+            }
+        }
+
+        // สร้างเครือข่ายโคลนมนุษย์ 3 ร่าง (Left Clone, Center Master, Right Clone)
+        const cloneOffsets = [-130, 0, 130];
+        const allClonesNodes = [];
+        const allClonesBones = [];
+        const allClonesFleshes = [];
+
+        cloneOffsets.forEach((offsetX, cloneIdx) => {
+            const nodesMap = new Map();
+            function addNode(id, x, y, z) {
+                const fullId = `c${cloneIdx}_${id}`;
+                if (!nodesMap.has(fullId)) {
+                    nodesMap.set(fullId, new HumanCell(fullId, x, y, z));
+                }
+                return nodesMap.get(fullId);
+            }
+
+            // โครงสร้างละเอียด: เพิ่มกระดูกซี่โครงและกระดูกสันหลังเป็นข้อๆ
+            const headTop = addNode('head_top', 0, 110, 0);
+            const headChin = addNode('head_chin', 0, 75, 0);
+            const neck = addNode('neck', 0, 65, 0);
+
+            const lShoulder = addNode('l_shoulder', -22, 55, 0);
+            const rShoulder = addNode('r_shoulder', 22, 55, 0);
+            
+            // ซี่โครงละเอียดซ้ายขวา
+            const rib1L = addNode('rib1_l', -14, 45, 4);
+            const rib1R = addNode('rib1_r', 14, 45, 4);
+            const rib2L = addNode('rib2_l', -16, 30, 6);
+            const rib2R = addNode('rib2_r', 16, 30, 6);
+            const rib3L = addNode('rib3_l', -14, 15, 4);
+            const rib3R = addNode('rib3_r', 14, 15, 4);
+
+            const spine1 = addNode('spine_1', 0, 50, 0);
+            const spine2 = addNode('spine_2', 0, 30, 0);
+            const spine3 = addNode('spine_3', 0, 5, 0);
+            const pelvisL = addNode('pelvis_l', -12, -25, 0);
+            const pelvisR = addNode('pelvis_r', 12, -25, 0);
+
+            const lElbow = addNode('l_elbow', -32, 10, 0);
+            const lHand  = addNode('l_hand', -38, -35, 0);
+            const rElbow = addNode('r_elbow', 32, 10, 0);
+            const rHand  = addNode('r_hand', 38, -35, 0);
+
+            const lKnee = addNode('l_knee', -14, -75, 0);
+            const lFoot = addNode('l_foot', -16, -125, 0);
+            const rKnee = addNode('r_knee', 14, -75, 0);
+            const rFoot = addNode('r_foot', 16, -125, 0);
+
+            const bones = [
+                { p1: headTop, p2: headChin, w: 3.5 },
+                { p1: headChin, p2: neck, w: 2.5 },
+                { p1: neck, p2: spine1, w: 3.0 },
+                { p1: spine1, p2: spine2, w: 3.0 },
+                { p1: spine2, p2: spine3, w: 3.0 },
+                { p1: spine3, p2: pelvisL, w: 2.5 },
+                { p1: spine3, p2: pelvisR, w: 2.5 },
+                { p1: neck, p2: lShoulder, w: 2.5 },
+                { p1: lShoulder, p2: lElbow, w: 2.8 },
+                { p1: lElbow, p2: lHand, w: 2.2 },
+                { p1: neck, p2: rShoulder, w: 2.5 },
+                { p1: rShoulder, p2: rElbow, w: 2.8 },
+                { p1: rElbow, p2: rHand, w: 2.2 },
+                { p1: pelvisL, p2: lKnee, w: 3.2 },
+                { p1: lKnee, p2: lFoot, w: 2.8 },
+                { p1: pelvisR, p2: rKnee, w: 3.2 },
+                { p1: rKnee, p2: rFoot, w: 2.8 },
+                // โครงซี่โครงเชื่อมต่อละเอียด
+                { p1: spine1, p2: rib1L, w: 1.8 }, { p1: spine1, p2: rib1R, w: 1.8 },
+                { p1: spine2, p2: rib2L, w: 1.8 }, { p1: spine2, p2: rib2R, w: 1.8 },
+                { p1: spine3, p2: rib3L, w: 1.8 }, { p1: spine3, p2: rib3R, w: 1.8 },
+                { p1: lShoulder, p2: rib1L, w: 1.8 }, { p1: rShoulder, p2: rib1R, w: 1.8 }
+            ];
+
+            // สีเสื้อผ้าและผิวหนังที่แตกต่างกันนิดหน่อยในแต่ละร่างโคลนเพื่อความสวยงาม
+            const shirtColor = cloneIdx === 1 ? 'rgba(50, 110, 190, 0.88)' : (cloneIdx === 0 ? 'rgba(190, 80, 50, 0.88)' : 'rgba(50, 150, 100, 0.88)');
+
+            const fleshes = [
+                { nodes: [headTop, headChin, neck, lShoulder], color: 'rgba(235, 190, 150, 0.85)' },
+                { nodes: [lShoulder, rShoulder, rib2R, rib2L], color: shirtColor },
+                { nodes: [rib2L, rib2R, pelvisR, pelvisL], color: shirtColor },
+                { nodes: [pelvisL, pelvisR, lKnee, rKnee], color: 'rgba(40, 50, 65, 0.88)' }
+            ];
+
+            allClonesNodes.push({ nodesMap, offsetX });
+            allClonesBones.push(bones);
+            allClonesFleshes.push(fleshes);
+        });
+
+        function project(x, y, z) {
+            const scale = 1.15;
+            return {
+                x: (x * scale) + (canvas.width / 2),
+                y: -(y * scale) + (canvas.height / 2) + 20,
+                z: z
+            };
+        }
+
+        function drawInkLine(p1, p2, width = 2.0) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = '#2c241d';
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+        }
+
+        let globalTime = 0;
+
+        function renderLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            globalTime += 0.035;
+
+            // อัปเดตทุกโหนดในทุกร่างโคลน
+            allClonesNodes.forEach(clone => {
+                clone.nodesMap.forEach(node => node.update(globalTime, clone.offsetX));
+            });
+
+            // เรนเดอร์ผิวหนังและเสื้อผ้าของทุกโคลน
+            if (currentMode === 'flesh' || currentMode === 'slice') {
+                allClonesFleshes.forEach((fleshes, idx) => {
+                    const clone = allClonesNodes[idx];
+                    fleshes.forEach(f => {
+                        // แปลงโหนด ID กลับเป็นออบเจกต์จริงใน nodesMap
+                        const resolvedNodes = f.nodes.map(n => {
+                            const fullId = `c${idx}_${n.id.split('_').slice(1).join('_')}`;
+                            return clone.nodesMap.get(fullId);
+                        });
+
+                        if (currentMode === 'slice') {
+                            const avgZ = resolvedNodes.reduce((acc, n) => acc + (n ? n.z : 0), 0) / resolvedNodes.length;
+                            if (avgZ > sliceDepth * 15) return;
+                        }
+
+                        const pts = resolvedNodes.map(n => project(n.x, n.y, n.z));
+                        ctx.beginPath();
+                        ctx.moveTo(pts[0].x, pts[0].y);
+                        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                        ctx.closePath();
+                        ctx.fillStyle = f.color;
+                        ctx.fill();
+                        ctx.strokeStyle = 'rgba(44, 36, 29, 0.3)';
+                        ctx.lineWidth = 1.5;
+                        ctx.stroke();
+                    });
+                });
+            }
+
+            // เรนเดอร์โครงกระดูกละเอียดของทุกโคลน
+            allClonesBones.forEach((bones, idx) => {
+                const clone = allClonesNodes[idx];
+                bones.forEach(bone => {
+                    const fullId1 = `c${idx}_${bone.p1.id.split('_').slice(1).join('_')}`;
+                    const fullId2 = `c${idx}_${bone.p2.id.split('_').slice(1).join('_')}`;
+                    const n1 = clone.nodesMap.get(fullId1);
+                    const n2 = clone.nodesMap.get(fullId2);
+                    if (!n1 || !n2) return;
+
+                    const p1 = project(n1.x, n1.y, n1.z);
+                    const p2 = project(n2.x, n2.y, n2.z);
+
+                    if (currentMode === 'slice') {
+                        const avgZ = (n1.z + n2.z) / 2;
+                        if (avgZ > sliceDepth * 15) return;
+                    }
+
+                    const alphaW = (currentMode === 'flesh') ? bone.w * 0.45 : bone.w;
+                    drawInkLine(p1, p2, alphaW);
+                });
+            });
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        renderLoop();
+    </script>
+</body>
+</html>
