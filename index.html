@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bodhi-Panya Engine - Living Yant UI</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a1817; /* ปรับพื้นหลังให้เข้มขึ้นเพื่อขับแสงของยันต์ให้โดดเด่น */
+            overflow: hidden;
+            font-family: 'Sarabun', sans-serif;
+            user-select: none;
+            touch-action: none; /* ป้องกันการเลื่อนหน้าจอเวลาลูบ Slider */
+        }
+        canvas { display: block; }
+        
+        #ui-overlay {
+            position: absolute;
+            bottom: 24px;
+            left: 24px;
+            background: rgba(26, 24, 23, 0.85);
+            padding: 18px 24px;
+            border-radius: 10px;
+            border-left: 5px solid #e0b471;
+            pointer-events: none;
+            max-width: 380px;
+            color: #f4f1ea;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        h1 { margin: 0 0 6px 0; font-size: 16px; font-weight: 600; color: #e0b471; }
+        p { margin: 0; font-size: 12px; line-height: 1.5; color: #b3a79a; }
+    </style>
+</head>
+<body>
+
+    <canvas id="engineCanvas"></canvas>
+
+    <div id="ui-overlay">
+        <h1>Bodhi-Panya Engine : Living Yant</h1>
+        <p>แตะที่ "ศูนย์กลางยันต์" เพื่อสลับกายเนื้อ/โครงกระดูก<br>ลูบขึ้น-ลงที่ "เส้นปราณ" เพื่อควบคุมแกนภาพตัด X-Ray</p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 1. Core State & Living UI Variables
+        let isFleshMode = true;
+        let sliceDepth = 1.0; 
+        
+        let yantCenterScreen = { x: 0, y: 0, r: 35 }; // รัศมีการกดปุ่มกลางอก
+        let sliderScreen = { x: 0, y: 0, w: 40, topY: 0, botY: 0 }; // พื้นที่เส้นปราณควบคุม X-Ray
+        
+        let isDraggingSlider = false;
+        let ripples = []; // คลื่นพลังงานเมื่อเกิดการสัมผัส
+
+        // 2. Cellular Node System
+        class HumanCell {
+            constructor(id, x, y, z) {
+                this.id = id;
+                this.ox = x; this.oy = y; this.oz = z;
+                this.x = x; this.y = y; this.z = z;
+                this.phase = Math.random() * Math.PI * 2;
+                this.speed = 0.035;
+                this.amplitude = 0.2;
+            }
+            update(time) {
+                this.phase += this.speed;
+                if (this.id.includes('chest') || this.id.includes('rib') || this.id.includes('yant')) {
+                    this.x = this.ox + Math.sin(this.phase + time) * this.amplitude;
+                    this.y = this.oy + Math.cos(this.phase + time) * (this.amplitude * 0.5);
+                } else {
+                    this.x = this.ox;
+                    this.y = this.oy;
+                }
+                this.z = this.oz;
+            }
+        }
+
+        const nodesMap = new Map();
+        function addNode(id, x, y, z) {
+            if (!nodesMap.has(id)) nodesMap.set(id, new HumanCell(id, x, y, z));
+            return nodesMap.get(id);
+        }
+
+        // 3. Anatomy Nodes (Human Structure)
+        const headTop = addNode('head_top', 0, 110, 0);
+        const headChin = addNode('head_chin', 0, 75, 0);
+        const neck = addNode('neck', 0, 65, 0);
+        const lShoulder = addNode('l_shoulder', -22, 55, 0);
+        const rShoulder = addNode('r_shoulder', 22, 55, 0);
+        const chestL = addNode('chest_l', -15, 35, 5);
+        const chestR = addNode('chest_r', 15, 35, 5);
+        const spineMid = addNode('spine_mid', 0, 20, -5);
+        const pelvisL = addNode('pelvis_l', -12, -25, 0);
+        const pelvisR = addNode('pelvis_r', 12, -25, 0);
+        const lElbow = addNode('l_elbow', -32, 10, 0);
+        const lHand  = addNode('l_hand', -38, -35, 0);
+        const rElbow = addNode('r_elbow', 32, 10, 0);
+        const rHand  = addNode('r_hand', 38, -35, 0);
+        const lKnee = addNode('l_knee', -14, -75, 0);
+        const lFoot = addNode('l_foot', -16, -125, 0);
+        const rKnee = addNode('r_knee', 14, -75, 0);
+        const rFoot = addNode('r_foot', 16, -125, 0);
+
+        // โหนดพิเศษ: ยันต์เกราะเพชรหน้าอก
+        const yCenter = addNode('yant_c', 0, 35, 8);
+        const yTop = addNode('yant_t', 0, 50, 6);
+        const yBot = addNode('yant_b', 0, 20, 6);
+        const yL = addNode('yant_l', -12, 35, 6);
+        const yR = addNode('yant_r', 12, 35, 6);
+
+        // โหนดพิเศษ: เส้นปราณสไลเดอร์ (หน้าท้อง)
+        const slideTop = addNode('slide_t', 0, 10, 6);
+        const slideBot = addNode('slide_b', 0, -30, 6);
+
+        const bones = [
+            { p1: headTop, p2: headChin, w: 3 }, { p1: headChin, p2: neck, w: 2 },
+            { p1: neck, p2: spineMid, w: 3 }, { p1: spineMid, p2: pelvisL, w: 2 },
+            { p1: spineMid, p2: pelvisR, w: 2 }, { p1: neck, p2: lShoulder, w: 2 },
+            { p1: lShoulder, p2: lElbow, w: 2 }, { p1: lElbow, p2: lHand, w: 2 },
+            { p1: neck, p2: rShoulder, w: 2 }, { p1: rShoulder, p2: rElbow, w: 2 },
+            { p1: rElbow, p2: rHand, w: 2 }, { p1: pelvisL, p2: lKnee, w: 3 },
+            { p1: lKnee, p2: lFoot, w: 2 }, { p1: pelvisR, p2: rKnee, w: 3 },
+            { p1: rKnee, p2: rFoot, w: 2 }
+        ];
+
+        const fleshes = [
+            { nodes: [headTop, headChin, neck, lShoulder], color: 'rgba(235, 190, 150, 0.4)' },
+            { nodes: [lShoulder, rShoulder, chestR, chestL], color: 'rgba(235, 190, 150, 0.5)' },
+            { nodes: [chestL, chestR, pelvisR, pelvisL], color: 'rgba(235, 190, 150, 0.4)' }
+        ];
+
+        // 4. Projection Engine
+        function project(x, y, z) {
+            const scale = 1.8; // ขยายโมเดลให้เห็นหน้าอกและยันต์ชัดๆ
+            return {
+                x: (x * scale) + (canvas.width / 2),
+                y: -(y * scale) + (canvas.height / 2) + 50,
+                z: z
+            };
+        }
+
+        // 5. Interaction Handling (The Digital Touch)
+        function handlePointerDown(e) {
+            const px = e.clientX || e.touches[0].clientX;
+            const py = e.clientY || e.touches[0].clientY;
+
+            // ตรวจสอบการกดปุ่มยันต์กลางอก (Toggle Flesh)
+            const dist = Math.hypot(px - yantCenterScreen.x, py - yantCenterScreen.y);
+            if (dist < yantCenterScreen.r) {
+                isFleshMode = !isFleshMode;
+                ripples.push({ x: yantCenterScreen.x, y: yantCenterScreen.y, radius: 10, alpha: 1.0 });
+                return;
+            }
+
+            // ตรวจสอบการจับเส้นปราณ (Slider)
+            if (px > sliderScreen.x - sliderScreen.w/2 && px < sliderScreen.x + sliderScreen.w/2) {
+                if (py > sliderScreen.topY && py < sliderScreen.botY) {
+                    isDraggingSlider = true;
+                    updateSliderFromY(py);
+                    ripples.push({ x: px, y: py, radius: 5, alpha: 0.8 });
+                }
+            }
+        }
+
+        function handlePointerMove(e) {
+            if (!isDraggingSlider) return;
+            const py = e.clientY || (e.touches && e.touches[0].clientY);
+            if (py) updateSliderFromY(py);
+        }
+
+        function handlePointerUp() {
+            isDraggingSlider = false;
+        }
+
+        function updateSliderFromY(py) {
+            // คำนวณ % ระหว่าง topY และ botY
+            const range = sliderScreen.botY - sliderScreen.topY;
+            const clampedY = Math.max(sliderScreen.topY, Math.min(py, sliderScreen.botY));
+            const percent = (clampedY - sliderScreen.topY) / range;
+            
+            // แมปเป็นค่าภาพตัด 1.0 (สมบูรณ์) ถึง -1.0 (ผ่าลงไป)
+            sliceDepth = 1.0 - (percent * 2.0);
+        }
+
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+        
+        canvas.addEventListener('touchstart', handlePointerDown, {passive: true});
+        canvas.addEventListener('touchmove', handlePointerMove, {passive: true});
+        window.addEventListener('touchend', handlePointerUp);
+
+        // 6. Main Render Loop
+        let globalTime = 0;
+
+        function renderLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            globalTime += 0.04;
+
+            nodesMap.forEach(node => node.update(globalTime));
+
+            // ดึงค่าโปรเจกชันสำหรับการวาดและการคำนวณ UI Bounds
+            const cSc = project(yCenter.x, yCenter.y, yCenter.z);
+            const tSc = project(yTop.x, yTop.y, yTop.z);
+            const bSc = project(yBot.x, yBot.y, yBot.z);
+            const lSc = project(yL.x, yL.y, yL.z);
+            const rSc = project(yR.x, yR.y, yR.z);
+
+            const sTopSc = project(slideTop.x, slideTop.y, slideTop.z);
+            const sBotSc = project(slideBot.x, slideBot.y, slideBot.z);
+
+            // อัปเดตพิกัด UI สำหรับดักจับเมาส์
+            yantCenterScreen.x = cSc.x;
+            yantCenterScreen.y = cSc.y;
+            sliderScreen.x = sTopSc.x;
+            sliderScreen.topY = sTopSc.y;
+            sliderScreen.botY = sBotSc.y;
+
+            // ก. เรนเดอร์ร่างกาย (ผิวหนังและกระดูก)
+            if (isFleshMode || sliceDepth < 1.0) {
+                fleshes.forEach(f => {
+                    const avgY = f.nodes.reduce((acc, n) => acc + n.y, 0) / f.nodes.length;
+                    if (avgY > sliceDepth * 50) return; // แกนภาพตัดแบบ Y-axis slicing
+
+                    const pts = f.nodes.map(n => project(n.x, n.y, n.z));
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0].x, pts[0].y);
+                    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                    ctx.closePath();
+                    ctx.fillStyle = f.color;
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(244, 241, 234, 0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+            }
+
+            bones.forEach(bone => {
+                const avgY = (bone.p1.y + bone.p2.y) / 2;
+                if (avgY > sliceDepth * 50 && isFleshMode) return;
+
+                const p1 = project(bone.p1.x, bone.p1.y, bone.p1.z);
+                const p2 = project(bone.p2.x, bone.p2.y, bone.p2.z);
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.strokeStyle = isFleshMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(224, 180, 113, 0.8)';
+                ctx.lineWidth = bone.w * 1.5;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            });
+
+            // ข. เรนเดอร์ Living Yant UI (ยันต์เกราะเพชรและเส้นปราณ)
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#e0b471';
+            
+            // ลายเส้นตาข่ายเกราะเพชร
+            ctx.beginPath();
+            ctx.moveTo(tSc.x, tSc.y);
+            ctx.lineTo(rSc.x, rSc.y);
+            ctx.lineTo(bSc.x, bSc.y);
+            ctx.lineTo(lSc.x, lSc.y);
+            ctx.closePath();
+            ctx.strokeStyle = 'rgba(224, 180, 113, 0.9)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // เส้นเชื่อมแกนกลาง
+            ctx.beginPath();
+            ctx.moveTo(tSc.x, tSc.y); ctx.lineTo(bSc.x, bSc.y);
+            ctx.moveTo(lSc.x, lSc.y); ctx.lineTo(rSc.x, rSc.y);
+            ctx.strokeStyle = 'rgba(224, 180, 113, 0.5)';
+            ctx.stroke();
+
+            // อักขระศูนย์กลาง (ดวงตาธรรม/ปุ่ม Toggle)
+            ctx.beginPath();
+            ctx.arc(cSc.x, cSc.y, 8 + Math.sin(globalTime * 2) * 2, 0, Math.PI * 2);
+            ctx.fillStyle = isFleshMode ? 'rgba(224, 180, 113, 0.8)' : '#fff';
+            ctx.fill();
+
+            // เส้นปราณ (Slider Line)
+            ctx.beginPath();
+            ctx.moveTo(sTopSc.x, sTopSc.y);
+            ctx.lineTo(sBotSc.x, sBotSc.y);
+            ctx.strokeStyle = 'rgba(224, 180, 113, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // จุดควบคุม X-Ray บนเส้นปราณ (Handle)
+            const range = sBotSc.y - sTopSc.y;
+            const currentPercent = (1.0 - sliceDepth) / 2.0;
+            const handleY = sTopSc.y + (range * currentPercent);
+            
+            ctx.beginPath();
+            ctx.arc(sTopSc.x, handleY, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#e0b471';
+            ctx.fill();
+
+            ctx.shadowBlur = 0; // Reset shadow
+
+            // ค. เรนเดอร์ Ripple Effects (คลื่นสัมผัส)
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                let r = ripples[i];
+                ctx.beginPath();
+                ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(224, 180, 113, ${r.alpha})`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                r.radius += 1.5;
+                r.alpha -= 0.05;
+                if (r.alpha <= 0) ripples.splice(i, 1);
+            }
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        renderLoop();
+    </script>
+</body>
+</html>
