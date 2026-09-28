@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Bodhi-Panya - The First Brick</title>
+    <style>
+        body { margin: 0; background: #f7f6f0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="engineCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // ========================================================
+        // 🧱 1. MEMORY BUFFER (ก้อนหน่วยความจำ: พิกัดอิฐ 1 ก้อน)
+        // ========================================================
+        const w = 100, d = 160, h = 30; // กว้าง, ลึก, สูง
+
+        // จุดยอด (Vertices) 8 จุดของรูปทรง 3 มิติ
+        const V = {
+            b0: {x: -w, y: 0, z: -d}, // ฐาน หลังซ้าย
+            b1: {x: w, y: 0, z: -d},  // ฐาน หลังขวา
+            b2: {x: w, y: 0, z: d},   // ฐาน หน้าขวา
+            b3: {x: -w, y: 0, z: d},  // ฐาน หน้าซ้าย
+            t0: {x: -w, y: h, z: -d}, // ยอด หลังซ้าย
+            t1: {x: w, y: h, z: -d},  // ยอด หลังขวา
+            t2: {x: w, y: h, z: d},   // ยอด หน้าขวา
+            t3: {x: -w, y: h, z: d}   // ยอด หน้าซ้าย
+        };
+
+        // ระนาบ (Faces) ที่ประกอบกันเป็นอิฐ (เก็บลง Memory Array)
+        const memoryBuffer = [
+            { id: 'top', vertices: [V.t0, V.t1, V.t2, V.t3], color: '#e5e0d8' },
+            { id: 'bottom', vertices: [V.b0, V.b1, V.b2, V.b3], color: '#888888' },
+            { id: 'front-left', vertices: [V.b3, V.b0, V.t0, V.t3], color: '#d1ccc0' },
+            { id: 'front-right', vertices: [V.b2, V.b3, V.t3, V.t2], color: '#beb9ad' },
+            { id: 'back-right', vertices: [V.b1, V.b2, V.t2, V.t1], color: '#aba69a' },
+            { id: 'back-left', vertices: [V.b0, V.b1, V.t1, V.t0], color: '#979388' }
+        ];
+
+        // ========================================================
+        // 📐 2. ISOMETRIC PROJECTION (สมการฉายภาพลงจอ 2D)
+        // ========================================================
+        const camera = { scale: 1.5, offsetX: canvas.width / 2, offsetY: canvas.height / 2 + 50 };
+
+        function project(vec3) {
+            const angle = Math.PI / 6; // มุมมาตรฐาน Isometric (30 องศา)
+            const x = (vec3.x - vec3.z) * Math.cos(angle);
+            const y = -(vec3.y + (vec3.x + vec3.z) * Math.sin(angle));
+            return { x: x * camera.scale + camera.offsetX, y: y * camera.scale + camera.offsetY };
+        }
+
+        // ========================================================
+        // 🚀 3. RENDER PIPELINE (ลำดับการวาด)
+        // ========================================================
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // ขั้นที่ 1: คำนวณ Z-Depth ของแต่ละระนาบ (หาว่าชิ้นไหนอยู่หน้า-หลัง)
+            memoryBuffer.forEach(face => {
+                let zSum = 0;
+                face.vertices.forEach(v => zSum += (v.x + v.y + v.z));
+                face.zDepth = zSum / face.vertices.length;
+            });
+
+            // ขั้นที่ 2: เรียงลำดับจาก "ไกลตา" ไป "ใกล้ตา" (Painter's Algorithm)
+            memoryBuffer.sort((a, b) => a.zDepth - b.zDepth);
+
+            // ขั้นที่ 3: กวาดข้อมูลจาก Memory มาวาดลงจอทีละระนาบตามลำดับ
+            memoryBuffer.forEach(face => {
+                const pts = face.vertices.map(project);
+                
+                // ตีเส้นกรอบโพลีกอน
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                ctx.closePath();
+
+                // สาดสีพื้น (บังวัตถุด้านหลัง)
+                ctx.fillStyle = face.color;
+                ctx.fill();
+
+                // ขีดเส้นสเก็ตช์ (Outline)
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+        }
+
+        render();
+    </script>
+</body>
+</html>
