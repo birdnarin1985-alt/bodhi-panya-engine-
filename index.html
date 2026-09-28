@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bodhi-Panya Engine - Full Flesh & Glass Temple</title>
+    <style>
+        body {
+            margin: 0;
+            background: #f4f1ea;
+            overflow: hidden;
+            font-family: 'Sarabun', sans-serif;
+        }
+        canvas { display: block; }
+        #ui-overlay {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 16px 22px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            pointer-events: none;
+            max-width: 390px;
+            border-left: 4px solid #d4a373;
+        }
+        h1 { margin: 0 0 6px 0; font-size: 16px; color: #2c241d; font-weight: 600; }
+        p { margin: 0; font-size: 12px; color: #6b5b52; line-height: 1.5; }
+        .badge {
+            display: inline-block;
+            margin-top: 8px;
+            background: #faedcd;
+            color: #8c6d46;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+        #toggle-btn {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            background: #2c241d;
+            color: #f4f1ea;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-family: 'Sarabun', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: all 0.2s ease;
+            z-index: 10;
+        }
+        #toggle-btn:hover {
+            background: #d4a373;
+            color: #2c241d;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="toggle-btn" onclick="toggleMode()">โหมด: 🏛️ สวมเนื้อหนังและกระจกแก้วเต็มระบบ (Flesh)</button>
+    <canvas id="engineCanvas"></canvas>
+
+    <div id="ui-overlay">
+        <h1>Bodhi-Panya Engine</h1>
+        <p>ส่วนที่ 1: เติมเนื้อหนัง ผนัง และกระจกแก้วเต็มระบบ ผูกติดกับโครงกระดูกแบบเรียลไทม์ หายใจและขยับไหวพร้อมกันทั้งสถาปัตยกรรม</p>
+        <div class="badge">FULL FLESH & GLASS INTEGRATION</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let isFleshMode = true; // เปิดโหมดเนื้อหนังเต็มรูปแบบเพื่อให้เห็นความอลังการทันที
+
+        function toggleMode() {
+            isFleshMode = !isFleshMode;
+            const btn = document.getElementById('toggle-btn');
+            if (isFleshMode) {
+                btn.innerText = "โหมด: 🏛️ สวมเนื้อหนังและกระจกแก้วเต็มระบบ (Flesh)";
+                btn.style.background = "#2c241d";
+                btn.style.color = "#f4f1ea";
+            } else {
+                btn.innerText = "โหมด: 🧬 เอ็กซเรย์โครงกระดูก (X-Ray)";
+                btn.style.background = "#d4a373";
+                btn.style.color = "#2c241d";
+            }
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 1. นาม & ธาตุวาโย (Cellular Breath Node)
+        class ArchitecturalCell {
+            constructor(id, x, y, z) {
+                this.id = id;
+                this.ox = x; this.oy = y; this.oz = z;
+                this.x = x; this.y = y; this.z = z;
+                this.phase = Math.random() * Math.PI * 2;
+                this.speed = 0.028;
+                // ฐานรากมั่นคง โครงสร้างช่วงบนหายใจไหวตัว
+                this.amplitude = (this.oy > 0) ? 0.45 : 0.0; 
+            }
+
+            update(time) {
+                if (this.amplitude > 0) {
+                    this.phase += this.speed;
+                    this.x = this.ox + Math.sin(this.phase + time) * this.amplitude;
+                }
+            }
+        }
+
+        // 2. สร้างโครงสร้างวิหาร 100 เมตร
+        const halfW = 28;       
+        const groundH = 0;      
+        const baseH = 25;       
+        const pillarH = 50;     
+        const beamH = baseH + pillarH; // 75
+        
+        const lowerRidgeH = beamH + 32;   
+        const upperRidgeH = beamH + 68;   
+        const spireTopH   = upperRidgeH + 85; 
+
+        const totalBays = 20;   
+        const bayLen = 16.5;    
+
+        const nodesMap = new Map();
+        const skeletonLines = [];
+        const dynamicFleshFaces = [];
+
+        function addNode(id, x, y, z) {
+            if (!nodesMap.has(id)) {
+                nodesMap.set(id, new ArchitecturalCell(id, x, y, z));
+            }
+            return nodesMap.get(id);
+        }
+
+        for (let i = 0; i < totalBays; i++) {
+            const zFront = -(i * bayLen);
+            const zBack  = -((i + 1) * bayLen);
+
+            // ฐานราก
+            const footL_under = addNode(`footL_under_${i}`, -halfW - 3, groundH - 10, zFront);
+            const footL_top   = addNode(`footL_top_${i}`, -halfW, groundH, zFront);
+            const footR_under = addNode(`footR_under_${i}`, halfW + 3, groundH - 10, zFront);
+            const footR_top   = addNode(`footR_top_${i}`, halfW, groundH, zFront);
+
+            // เสาและคาน
+            const cL_base = addNode(`colL_base_${i}`, -halfW, baseH, zFront);
+            const cL_top  = addNode(`colL_top_${i}`, -halfW, beamH, zFront);
+            const cR_base = addNode(`colR_base_${i}`, halfW, baseH, zFront);
+            const cR_top  = addNode(`colR_top_${i}`, halfW, beamH, zFront);
+
+            const cL_base_back = addNode(`colL_base_${i+1}`, -halfW, baseH, zBack);
+            const cR_base_back = addNode(`colR_base_${i+1}`, halfW, baseH, zBack);
+            const cL_top_back  = addNode(`colL_top_${i+1}`, -halfW, beamH, zBack);
+            const cR_top_back  = addNode(`colR_top_${i+1}`, halfW, beamH, zBack);
+
+            const rLowFront = addNode(`rLow_${i}`, 0, lowerRidgeH, zFront);
+            const rLowBack  = addNode(`rLow_${i+1}`, 0, lowerRidgeH, zBack);
+            const rUpFront  = addNode(`rUp_${i}`, 0, upperRidgeH, zFront);
+            const rUpBack   = addNode(`rUp_${i+1}`, 0, upperRidgeH, zBack);
+
+            // โครงกระดูกเส้น
+            skeletonLines.push({ p1: footL_under, p2: footL_top, w: 2.2 });
+            skeletonLines.push({ p1: footR_under, p2: footR_top, w: 2.2 });
+            skeletonLines.push({ p1: footL_top, p2: cL_base, w: 1.8 });
+            skeletonLines.push({ p1: footR_top, p2: cR_base, w: 1.8 });
+            skeletonLines.push({ p1: cL_base, p2: cL_top, w: 1.6 });
+            skeletonLines.push({ p1: cR_base, p2: cR_top, w: 1.6 });
+            skeletonLines.push({ p1: cL_top, p2: cL_top_back, w: 1.3 });
+            skeletonLines.push({ p1: cR_top, p2: cR_top_back, w: 1.3 });
+            skeletonLines.push({ p1: rLowFront, p2: rLowBack, w: 1.4 });
+            skeletonLines.push({ p1: rUpFront, p2: rUpBack, w: 1.6 });
+            skeletonLines.push({ p1: cL_top, p2: rLowFront, w: 1.2 });
+            skeletonLines.push({ p1: cR_top, p2: rLowFront, w: 1.2 });
+            skeletonLines.push({ p1: rLowFront, p2: rUpFront, w: 1.3 });
+
+            // 🏛️ 1. ผืนหลังคาแก้ว (Roof Glass Faces)
+            dynamicFleshFaces.push({
+                getZDepth: () => (rUpFront.z + rUpBack.z) / 2,
+                nodes: [rUpBack, rUpFront, cL_top, cL_top_back],
+                color: 'rgba(212, 163, 115, 0.32)'
+            });
+            dynamicFleshFaces.push({
+                getZDepth: () => (rUpFront.z + rUpBack.z) / 2,
+                nodes: [rUpBack, rUpFront, cR_top, cR_top_back],
+                color: 'rgba(180, 130, 90, 0.26)'
+            });
+
+            // 🏛️ 2. ผนังกระจกใสข้างวิหาร (Side Glass Walls - เต็มระบบซ้ายขวา)
+            dynamicFleshFaces.push({
+                getZDepth: () => (zFront + zBack) / 2,
+                nodes: [cL_base, cL_top, cL_top_back, cL_base_back],
+                color: 'rgba(130, 180, 210, 0.20)'
+            });
+            dynamicFleshFaces.push({
+                getZDepth: () => (zFront + zBack) / 2,
+                nodes: [cR_base, cR_top, cR_top_back, cR_base_back],
+                color: 'rgba(130, 180, 210, 0.20)'
+            });
+        }
+
+        // ยอดฉัตร
+        const spireBaseNode = addNode('spire_base', 0, upperRidgeH, -50);
+        const spireTipNode  = addNode('spire_tip', 0, spireTopH, -50);
+        skeletonLines.push({ p1: spireBaseNode, p2: spireTipNode, w: 2.2 });
+
+        for(let c = 1; c <= 4; c++) {
+            let yL = upperRidgeH + (c * 12);
+            let wS = 7 - (c * 1.2);
+            const n1 = addNode(`chattra_l_${c}`, -wS, yL, -50);
+            const n2 = addNode(`chattra_r_${c}`, wS, yL, -50);
+            skeletonLines.push({ p1: n1, p2: n2, w: 1.4 });
+        }
+
+        // 3. Projection & Ink Stylizer
+        function project(x, y, z) {
+            const angle = Math.PI / 6;
+            const scale = 0.68;
+
+            const isoX = (x - z) * Math.cos(angle);
+            const isoY = -(y + (x + z) * Math.sin(angle));
+
+            return {
+                x: (isoX * scale) + (canvas.width / 2) - 20,
+                y: (isoY * scale) + (canvas.height / 2) + 90
+            };
+        }
+
+        function drawInkLine(p1, p2, width = 1.4, overShoot = 4, jitter = 0.6) {
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const len = Math.hypot(dx, dy);
+            if (len === 0) return;
+
+            const uX = dx / len;
+            const uY = dy / len;
+            const startX = p1.x - (uX * overShoot);
+            const startY = p1.y - (uY * overShoot);
+            const endX   = p2.x + (uX * overShoot);
+            const endY   = p2.y + (uY * overShoot);
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+
+            const steps = Math.max(2, Math.floor(len / 25));
+            for (let i = 1; i <= steps; i++) {
+                const t = i / steps;
+                const rJ = (Math.random() - 0.5) * jitter;
+                ctx.lineTo(startX + (endX - startX) * t + rJ, startY + (endY - startY) * t + rJ);
+            }
+
+            ctx.strokeStyle = '#2c241d';
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+        }
+
+        let globalTime = 0;
+
+        // 4. Main Render Loop
+        function renderLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            globalTime += 0.035;
+
+            // อัปเดตลมหายใจเซลล์ทุกโหนด
+            nodesMap.forEach(node => node.update(globalTime));
+
+            // เรนเดอร์เนื้อหนังและกระจกแก้วเต็มระบบ (หลังคา + ผนังข้าง)
+            if (isFleshMode) {
+                dynamicFleshFaces.forEach(face => {
+                    face.zDepth = face.getZDepth();
+                });
+                dynamicFleshFaces.sort((a, b) => a.zDepth - b.zDepth);
+
+                dynamicFleshFaces.forEach(face => {
+                    const pts = face.nodes.map(n => project(n.x, n.y, n.z));
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0].x, pts[0].y);
+                    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                    ctx.closePath();
+                    ctx.fillStyle = face.color;
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(44, 36, 29, 0.22)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+            }
+
+            // เรนเดอร์โครงกระดูก
+            skeletonLines.forEach(line => {
+                line.zDepth = (line.p1.z + line.p2.z) / 2;
+            });
+            skeletonLines.sort((a, b) => a.zDepth - b.zDepth);
+
+            skeletonLines.forEach(line => {
+                const p1 = project(line.p1.x, line.p1.y, line.p1.z);
+                const p2 = project(line.p2.x, line.p2.y, line.p2.z);
+                const alphaW = isFleshMode ? line.w * 0.65 : line.w;
+                drawInkLine(p1, p2, alphaW, 4, 0.5);
+            });
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        renderLoop();
+    </script>
+</body>
+</html>
