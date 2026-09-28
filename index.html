@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bodhi-Panya - Wat Tha Sung 100m Colonnade</title>
+    <style>
+        body { margin: 0; background: #f6f4ee; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="engineCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            render();
+        }
+        window.addEventListener('resize', resize);
+
+        // ==========================================
+        // 🎯 1. ISOMETRIC PROJECTION (SCALED FOR 100M)
+        // ==========================================
+        function project(x, y, z) {
+            const angle = Math.PI / 6; // 30 องศา
+            const scale = 0.85; // ย่อสเกลเพื่อให้รองรับความยาว 100 เมตรในจอ
+
+            const isoX = (x - z) * Math.cos(angle);
+            const isoY = -(y + (x + z) * Math.sin(angle));
+
+            // ปรับตำแหน่งออฟเซ็ตให้สายตามองเห็นทิวแถวยาวพาดกลางจอ
+            const screenX = (isoX * scale) + (canvas.width / 2) - 30;
+            const screenY = (isoY * scale) + (canvas.height / 2) - 20;
+
+            return { x: screenX, y: screenY };
+        }
+
+        // ==========================================
+        // 🧱 2. PARAMETRIC 100M ARCHITECTURE BUFFER
+        // ==========================================
+        const halfW = 25;       // กว้าง 50 หน่วย (เทียบเท่า ~15 เมตร)
+        const baseH = 20;       // ฐานรากยกพื้น
+        const pillarH = 50;     // เสาสูงโปร่ง
+        const beamH = baseH + pillarH; // 70
+        const ridgeH = beamH + 35;     // 105 (ยอดอกไก่)
+
+        const totalBays = 20;   // 20 ช่วงเสาจริง
+        const bayLen = 16.5;    // ความยาวต่อช่วงเสา รวมเป็น 330 หน่วย (อัตราส่วน ~6.6 เท่าของความกว้าง)
+
+        const sceneGraph = [];
+
+        // ลูปสร้างสถาปัตยกรรมต่อเนื่องตามแนวลึกแกน Z
+        for (let i = 0; i < totalBays; i++) {
+            const zFront = -(i * bayLen);
+            const zBack  = -((i + 1) * bayLen);
+
+            // เสาซ้าย-ขวา ประจำช่วง
+            const colL_base = { x: -halfW, y: baseH, z: zFront };
+            const colL_top  = { x: -halfW, y: beamH, z: zFront };
+            const colR_base = { x:  halfW, y: baseH, z: zFront };
+            const colR_top  = { x:  halfW, y: beamH, z: zFront };
+
+            const colL_top_back = { x: -halfW, y: beamH, z: zBack };
+            const colR_top_back = { x:  halfW, y: beamH, z: zBack };
+
+            // ยอดสันอกไก่
+            const rFront = { x: 0, y: ridgeH, z: zFront };
+            const rBack  = { x: 0, y: ridgeH, z: zBack };
+
+            // 1. ระนาบทางเดิน/พื้นฐานราก (แต้มสีทองสะท้อนแก้วเป็นช่วงๆ)
+            sceneGraph.push({
+                type: 'face',
+                id: `floor-${i}`,
+                vertices: [
+                    { x: -halfW, y: baseH, z: zBack },
+                    { x:  halfW, y: baseH, z: zBack },
+                    { x:  halfW, y: baseH, z: zFront },
+                    { x: -halfW, y: baseH, z: zFront }
+                ],
+                fillAccent: i % 2 === 0 ? 'rgba(230, 150, 40, 0.18)' : null,
+                hatch: false
+            });
+
+            // 2. ผืนหลังคาฝั่งลาดขวา
+            sceneGraph.push({
+                type: 'face',
+                id: `roof-right-${i}`,
+                vertices: [rBack, rFront, colR_top, colR_top_back],
+                fillAccent: 'rgba(230, 140, 40, 0.22)',
+                hatch: false
+            });
+
+            // 3. จั่วด้านหน้าสุด (เฉพาะช่วงแรก i === 0)
+            if (i === 0) {
+                sceneGraph.push({
+                    type: 'face',
+                    id: 'front-gable',
+                    vertices: [rFront, colL_top, colR_top],
+                    fillAccent: null,
+                    hatch: true,
+                    hatchDensity: 5
+                });
+                sceneGraph.push({
+                    type: 'line',
+                    id: 'beam-front-tie',
+                    v1: colL_top,
+                    v2: colR_top,
+                    width: 2.0,
+                    overShoot: 6,
+                    jitter: 1.0
+                });
+                sceneGraph.push({
+                    type: 'line',
+                    id: 'rafter-front-left',
+                    v1: rFront,
+                    v2: colL_top,
+                    width: 1.8,
+                    overShoot: 6,
+                    jitter: 1.0
+                });
+                sceneGraph.push({
+                    type: 'line',
+                    id: 'rafter-front-right',
+                    v1: rFront,
+                    v2: colR_top,
+                    width: 1.8,
+                    overShoot: 6,
+                    jitter: 1.0
+                });
+            }
+
+            // 4. เสาวิหารแก้ว (เสาซ้าย และ เสาขวา)
+            sceneGraph.push({
+                type: 'line',
+                id: `pillar-L-${i}`,
+                v1: colL_base,
+                v2: colL_top,
+                width: 1.6,
+                overShoot: 5,
+                jitter: 0.9
+            });
+            sceneGraph.push({
+                type: 'line',
+                id: `pillar-R-${i}`,
+                v1: colR_base,
+                v2: colR_top,
+                width: 1.6,
+                overShoot: 5,
+                jitter: 0.9
+            });
+
+            // 5. คานยาวตลอดแนวอาคาร (Longitudinal Beams)
+            sceneGraph.push({
+                type: 'line',
+                id: `beam-long-L-${i}`,
+                v1: colL_top,
+                v2: colL_top_back,
+                width: 1.4,
+                overShoot: 4,
+                jitter: 0.8
+            });
+            sceneGraph.push({
+                type: 'line',
+                id: `beam-long-R-${i}`,
+                v1: colR_top,
+                v2: colR_top_back,
+                width: 1.4,
+                overShoot: 4,
+                jitter: 0.8
+            });
+
+            // 6. สันอกไก่ยาวตลอดอาคาร (Roof Ridge)
+            sceneGraph.push({
+                type: 'line',
+                id: `ridge-${i}`,
+                v1: rFront,
+                v2: rBack,
+                width: 1.8,
+                overShoot: 5,
+                jitter: 0.9
+            });
+        }
+
+        // ==========================================
+        // 🖌️ 3. STYLIZER ENGINE
+        // ==========================================
+        function drawInkLine(p1, p2, width = 1.4, overShoot = 5, jitter = 0.9) {
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const len = Math.hypot(dx, dy);
+            if (len === 0) return;
+
+            const uX = dx / len;
+            const uY = dy / len;
+
+            const startX = p1.x - (uX * overShoot);
+            const startY = p1.y - (uY * overShoot);
+            const endX   = p2.x + (uX * overShoot);
+            const endY   = p2.y + (uY * overShoot);
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+
+            const steps = Math.max(2, Math.floor(len / 18));
+            for (let i = 1; i <= steps; i++) {
+                const t = i / steps;
+                const rJitterX = (Math.random() - 0.5) * jitter;
+                const rJitterY = (Math.random() - 0.5) * jitter;
+                ctx.lineTo(startX + (endX - startX) * t + rJitterX, startY + (endY - startY) * t + rJitterY);
+            }
+
+            ctx.strokeStyle = '#1e1c1a';
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+        }
+
+        function drawFaceHatching(pts, density = 6) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+            ctx.closePath();
+            ctx.clip();
+
+            ctx.strokeStyle = 'rgba(30, 28, 25, 0.4)';
+            ctx.lineWidth = 0.85;
+
+            let minX = Math.min(...pts.map(p => p.x));
+            let maxX = Math.max(...pts.map(p => p.x));
+            let minY = Math.min(...pts.map(p => p.y));
+            let maxY = Math.max(...pts.map(p => p.y));
+
+            for (let x = minX - (maxY - minY); x < maxX; x += density) {
+                ctx.beginPath();
+                ctx.moveTo(x, minY);
+                ctx.lineTo(x + (maxY - minY), maxY);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // ==========================================
+        // 🚀 4. PIPELINE: SORT & DRAW
+        // ==========================================
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Z-Depth Sorting จากหลังสุดมาหน้าสุด
+            sceneGraph.forEach(item => {
+                if (item.type === 'face') {
+                    let zSum = 0;
+                    item.vertices.forEach(v => zSum += (v.x + v.y + v.z));
+                    item.zDepth = zSum / item.vertices.length;
+                } else if (item.type === 'line') {
+                    item.zDepth = (item.v1.x + item.v1.y + item.v1.z + item.v2.x + item.v2.y + item.v2.z) / 2;
+                }
+            });
+            sceneGraph.sort((a, b) => a.zDepth - b.zDepth);
+
+            // Pass 1: ระบายสีและสานเส้น
+            sceneGraph.forEach(item => {
+                if (item.type === 'face') {
+                    const pts = item.vertices.map(v => project(v.x, v.y, v.z));
+
+                    if (item.fillAccent) {
+                        ctx.beginPath();
+                        ctx.moveTo(pts[0].x, pts[0].y);
+                        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                        ctx.closePath();
+                        ctx.fillStyle = item.fillAccent;
+                        ctx.fill();
+                    }
+
+                    if (item.hatch) {
+                        drawFaceHatching(pts, item.hatchDensity);
+                    }
+                }
+            });
+
+            // Pass 2: เส้นหมึกสถาปัตยกรรม
+            sceneGraph.forEach(item => {
+                if (item.type === 'line') {
+                    const p1 = project(item.v1.x, item.v1.y, item.v1.z);
+                    const p2 = project(item.v2.x, item.v2.y, item.v2.z);
+                    drawInkLine(p1, p2, item.width, item.overShoot, item.jitter);
+                }
+            });
+        }
+
+        resize();
+    </script>
+</body>
+</html>
