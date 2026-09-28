@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bodhi-Panya - Workshop #2: 4 Pillars</title>
+    <style>
+        body { margin: 0; background: #f7f6f0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="engineCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            render();
+        }
+        window.addEventListener('resize', resize);
+
+        // ==========================================
+        // 🎯 1. ISOMETRIC PROJECTION
+        // ==========================================
+        function project(x, y, z) {
+            const angle = Math.PI / 6; 
+            const scale = 2.5;
+
+            const isoX = (x - z) * Math.cos(angle);
+            const isoY = -(y + (x + z) * Math.sin(angle));
+
+            const screenX = (isoX * scale) + (canvas.width / 2);
+            const screenY = (isoY * scale) + (canvas.height / 2);
+
+            return { x: screenX, y: screenY };
+        }
+
+        // ==========================================
+        // 🧱 2. MEMORY BUFFER (ฐาน + เสา 4 ต้น)
+        // ==========================================
+        const halfSize = 25;
+        const baseH = 50;
+        const pillarH = 40;
+        const topH = baseH + pillarH; // 90 หน่วย
+
+        // จุดยอดของฐาน
+        const V = {
+            b0: { x: -halfSize, y: 0,     z: -halfSize },
+            b1: { x:  halfSize, y: 0,     z: -halfSize },
+            b2: { x:  halfSize, y: 0,     z:  halfSize },
+            b3: { x: -halfSize, y: 0,     z:  halfSize },
+
+            t0: { x: -halfSize, y: baseH, z: -halfSize },
+            t1: { x:  halfSize, y: baseH, z: -halfSize },
+            t2: { x:  halfSize, y: baseH, z:  halfSize },
+            t3: { x: -halfSize, y: baseH, z:  halfSize },
+
+            // ยอดเสาทั้ง 4 มุม
+            p0: { x: -halfSize, y: topH,  z: -halfSize }, // ยอดเสาหลัง-ซ้าย
+            p1: { x:  halfSize, y: topH,  z: -halfSize }, // ยอดเสาหลัง-ขวา
+            p2: { x:  halfSize, y: topH,  z:  halfSize }, // ยอดเสาหน้า-ขวา
+            p3: { x: -halfSize, y: topH,  z:  halfSize }  // ยอดเสาหน้า-ซ้าย
+        };
+
+        const faces = [
+            // ผนังและระนาบฐาน
+            { type: 'face', id: 'bottom',     vertices: [V.b0, V.b1, V.b2, V.b3], color: 'rgba(200, 200, 200, 0.3)' },
+            { type: 'face', id: 'top',        vertices: [V.t0, V.t1, V.t2, V.t3], color: 'rgba(240, 230, 210, 0.4)' },
+            { type: 'face', id: 'back-left',  vertices: [V.b0, V.b1, V.t1, V.t0], color: 'rgba(180, 170, 160, 0.3)' },
+            { type: 'face', id: 'back-right', vertices: [V.b1, V.b2, V.t2, V.t1], color: 'rgba(160, 150, 140, 0.3)' },
+            { type: 'face', id: 'front-left', vertices: [V.b0, V.b3, V.t3, V.t0], color: 'rgba(210, 195, 175, 0.4)' },
+            { type: 'face', id: 'front-right',vertices: [V.b3, V.b2, V.t2, V.t3], color: 'rgba(225, 210, 190, 0.4)' },
+
+            // เสาทั้ง 4 ต้น (ใช้ชนิด 'pillar' ชี้ขึ้นฟ้า)
+            { type: 'pillar', id: 'p-back-left',  v1: V.t0, v2: V.p0, color: '#b45309' },
+            { type: 'pillar', id: 'p-back-right', v1: V.t1, v2: V.p1, color: '#b45309' },
+            { type: 'pillar', id: 'p-front-right',v1: V.t2, v2: V.p2, color: '#d97706' },
+            { type: 'pillar', id: 'p-front-left', v1: V.t3, v2: V.p3, color: '#d97706' }
+        ];
+
+        // ==========================================
+        // 📐 3. RENDER PIPELINE
+        // ==========================================
+        function drawAxis(p1, p2, color, text) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            if (text) {
+                ctx.fillStyle = color;
+                ctx.font = 'bold 12px monospace';
+                ctx.fillText(text, p2.x + 5, p2.y + 5);
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Crosshair กลางจอ
+            ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0); ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.moveTo(0, canvas.height / 2); ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+
+            // 2. แกนอ้างอิง
+            const origin = project(0, 0, 0);
+            drawAxis(origin, project(60, 0, 0), '#ff4444', 'X+');
+            drawAxis(origin, project(0, 100, 0), '#44aa44', 'Y+');
+            drawAxis(origin, project(0, 0, 60), '#4444ff', 'Z+');
+
+            // 3. Depth Sorting
+            faces.forEach(item => {
+                if (item.type === 'face') {
+                    let zSum = 0;
+                    item.vertices.forEach(v => zSum += (v.x + v.y + v.z));
+                    item.zDepth = zSum / item.vertices.length;
+                } else if (item.type === 'pillar') {
+                    item.zDepth = (item.v1.x + item.v1.y + item.v1.z + item.v2.x + item.v2.y + item.v2.z) / 2;
+                }
+            });
+            faces.sort((a, b) => a.zDepth - b.zDepth);
+
+            // 4. เรนเดอร์วัตถุตามลำดับความลึก
+            faces.forEach(item => {
+                if (item.type === 'face') {
+                    const pts = item.vertices.map(v => project(v.x, v.y, v.z));
+
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0].x, pts[0].y);
+                    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                    ctx.closePath();
+
+                    ctx.fillStyle = item.color;
+                    ctx.fill();
+
+                    ctx.strokeStyle = 'rgba(50, 40, 30, 0.5)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                } else if (item.type === 'pillar') {
+                    const pStart = project(item.v1.x, item.v1.y, item.v1.z);
+                    const pEnd = project(item.v2.x, item.v2.y, item.v2.z);
+
+                    // วาดแนวเสาเป็นเส้นหนาคมชัด
+                    ctx.beginPath();
+                    ctx.moveTo(pStart.x, pStart.y);
+                    ctx.lineTo(pEnd.x, pEnd.y);
+                    ctx.strokeStyle = item.color;
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+
+                    // มาร์กเกอร์จุดหัวเสา
+                    ctx.beginPath();
+                    ctx.arc(pEnd.x, pEnd.y, 3, 0, Math.PI * 2);
+                    ctx.fillStyle = item.color;
+                    ctx.fill();
+                }
+            });
+
+            // 5. จุด Origin Marker
+            ctx.beginPath();
+            ctx.arc(origin.x, origin.y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#000';
+            ctx.fill();
+        }
+
+        resize();
+    </script>
+</body>
+</html>
