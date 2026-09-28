@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bodhi-Panya v9.0 - True Fullscreen Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; background-color: #1a1a1a; margin: 0; overflow: hidden; touch-action: none; }
+        #viewport {
+            width: 100vw; height: 100vh; position: relative;
+            background-color: #f7f6f0;
+            background-image: radial-gradient(#d6cfbc 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+        
+        /* 🌟 Floating HUD Card (แสดงเฉพาะตอนแตะวัตถุ) */
+        #bim-hud {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: rgba(255, 253, 245, 0.95); border-left: 4px solid #b47a18;
+            padding: 14px 22px; border-radius: 8px; box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+            max-width: 90%; width: 380px; opacity: 0; pointer-events: none; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #bim-hud.active { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+        
+        /* ปุ่ม Fullscreen มินิมอลมุมบน */
+        #fs-btn {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(255, 253, 245, 0.8); border: 1px solid #d6cfbc;
+            padding: 8px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; color: #78350f;
+            cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.05); z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="viewport">
+        <button id="fs-btn" onclick="toggleFullScreen()">⛶ Fullscreen</button>
+        
+        <div class="absolute top-5 left-5 pointer-events-none">
+            <h1 class="text-lg font-bold text-amber-700">⚙️ Bodhi-Panya v9.0</h1>
+            <p class="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">True Fullscreen Engine</p>
+        </div>
+        
+        <canvas id="engineCanvas"></canvas>
+
+        <!-- Floating HUD แทนกล่องถาวร -->
+        <div id="bim-hud">
+            <h3 id="bim-title" class="text-base font-bold text-zinc-900 mb-1">หัวข้อ</h3>
+            <p id="bim-desc" class="text-xs text-zinc-700 leading-relaxed font-serif italic">รายละเอียด</p>
+        </div>
+
+        <div class="absolute bottom-4 right-5 text-right pointer-events-none">
+            <div class="text-sm font-bold text-zinc-800 font-serif italic">ช่างเบิร์ด</div>
+            <div class="text-[9px] font-bold text-amber-600 tracking-widest">สัมปติจฉามิ</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let camera = { scale: 1, offsetX: 0, offsetY: 0 };
+        let rootNode = null; 
+        let renderQueue = []; 
+        let brushLibrary = {}; 
+        
+        let inputState = { mouseX: -100, mouseY: -100, hoveredId: null };
+        let needsRedraw = true; 
+        
+        const bimDatabase = {
+            'foundation': { title: "🧱 ฐานรากวิหาร 100 เมตร", desc: "ฐานรากแบบยกเก็จ รองรับโครงสร้าง Scene Graph ทั้งหมด" },
+            'roof_tier1': { title: "🏛️ หลังคาปั้นหยา (ชายคาโค้งอ่อนช้อย)", desc: "ประยุกต์ใช้สมการเส้นโค้ง Bezier ให้ชายตามีความแอ่นพริ้วแบบสถาปัตยกรรมไทย" },
+            'gable_front': { title: "✨ หน้าบันและลำยองไทยประยุกต์", desc: "องค์ประกอบประดับด้านหน้า เสริมความสมบูรณ์แบบตามหลักสถาปัตยกรรมไทย" },
+            'pillar': { title: "📐 แนวเสาบีมแก้ว", desc: "พอยน์เตอร์เชื่อมต่อกับฐานราก มั่นคงแข็งแรงตามมาตรฐานวิศวกรรม" },
+            'chattra': { title: "✨ ยอดฉัตร 7 ชั้น", desc: "ศูนย์รวมความศรัทธา ตั้งอยู่บนยอดสันหลังคาที่คำนวณด้วย Scene Graph" }
+        };
+
+        class Vector3 { constructor(x, y, z) { this.x = x; this.y = y; this.z = z; } }
+
+        class BIMNode {
+            constructor(id, vertices, material, isCurved = false) {
+                this.id = id;
+                this.vertices = vertices;
+                this.material = material; 
+                this.isCurved = isCurved;
+                this.zDepth = 0;
+                this.parent = null;
+                this.firstChild = null;
+                this.nextSibling = null;
+            }
+
+            addChild(node) {
+                node.parent = this;
+                if (!this.firstChild) {
+                    this.firstChild = node;
+                } else {
+                    let current = this.firstChild;
+                    while (current.nextSibling) { current = current.nextSibling; }
+                    current.nextSibling = node;
+                }
+            }
+        }
+
+        function initBrushes() {
+            const createBrush = (name, type, size, color, lw) => {
+                const osc = document.createElement('canvas'); osc.width = size; osc.height = size;
+                const oCtx = osc.getContext('2d'); oCtx.strokeStyle = color; oCtx.lineWidth = lw; oCtx.beginPath();
+                if(type==='diag') { oCtx.moveTo(0,size); oCtx.lineTo(size,0); }
+                else if(type==='diag-rev') { oCtx.moveTo(0,0); oCtx.lineTo(size,size); }
+                else if(type==='vert') { oCtx.moveTo(size/2,0); oCtx.lineTo(size/2,size); } 
+                else if(type==='cross') { oCtx.moveTo(0,0); oCtx.lineTo(size,size); oCtx.moveTo(0,size); oCtx.lineTo(size,0); }
+                oCtx.stroke(); brushLibrary[name] = ctx.createPattern(osc, 'repeat');
+            };
+            createBrush('roof_front', 'diag', 12, 'rgba(100, 90, 80, 0.4)', 0.8);
+            createBrush('roof_side', 'diag-rev', 12, 'rgba(70, 60, 50, 0.4)', 0.8);
+            createBrush('roof_shadow', 'cross', 10, 'rgba(40, 40, 40, 0.4)', 0.8);
+            createBrush('baseHatch', 'vert', 8, 'rgba(0, 0, 0, 0.2)', 1);
+            brushLibrary['solid'] = '#f7f6f0';
+        }
+
+        function buildSceneGraph() {
+            const w = 120, d = 200, h = 15;
+            const fB = [new Vector3(-w,0,-d), new Vector3(w,0,-d), new Vector3(w,0,d), new Vector3(-w,0,d)];
+            const fT = [new Vector3(-w,h,-d), new Vector3(w,h,-d), new Vector3(w,h,d), new Vector3(-w,h,d)];
+            
+            rootNode = new BIMNode('foundation', fT, { fill: 'solid', stroke: '#222', width: 1.5, jitter: 3 });
+            [0,1,2,3].forEach(i => rootNode.addChild(new BIMNode('foundation', [fB[i], fB[(i+1)%4], fT[(i+1)%4], fT[i]], { fill: 'baseHatch', stroke: '#333', width: 1, jitter: 2 })));
+
+            for(let i=0; i<=4; i++) {
+                const zP = -d + 15 + (i * ((d*2 - 30)/4));
+                rootNode.addChild(new BIMNode('pillar', [new Vector3(-w+15, h, zP), new Vector3(-w+15, h+60, zP)], { fill: null, stroke: '#555', width: 1, jitter: 1 }));
+                rootNode.addChild(new BIMNode('pillar', [new Vector3(w-15, h, zP), new Vector3(w-15, h+60, zP)], { fill: null, stroke: '#555', width: 1, jitter: 1 }));
+            }
+
+            const rBase = h + 60;
+            const bFL = new Vector3(-w-15, rBase, d+15);
+            const bFR = new Vector3(w+15, rBase, d+15);
+            const bBL = new Vector3(-w-15, rBase, -d-15);
+            const bBR = new Vector3(w+15, rBase, -d-15);
+            
+            const tFL = new Vector3(-w*0.6, rBase+50, d*0.6);
+            const tFR = new Vector3(w*0.6, rBase+50, d*0.6);
+            const tBL = new Vector3(-w*0.6, rBase+50, -d*0.6);
+            const tBR = new Vector3(w*0.6, rBase+50, -d*0.6);
+
+            const roofTier1 = new BIMNode('roof_tier1', [bFL, bFR, tFR, tFL], { fill: 'roof_front', stroke: '#111', width: 1.2, jitter: 4 }, true);
+            const roofBack  = new BIMNode('roof_tier1', [bBR, bBL, tBL, tBR], { fill: 'roof_shadow', stroke: '#111', width: 1.2, jitter: 4 }, false);
+            const roofLeft  = new BIMNode('roof_tier1', [bBL, bFL, tFL, tBL], { fill: 'roof_side', stroke: '#111', width: 1.2, jitter: 4 }, true);
+            const roofRight = new BIMNode('roof_tier1', [bFR, bBR, tBR, tFR], { fill: 'roof_side', stroke: '#111', width: 1.2, jitter: 4 }, true);
+
+            rootNode.addChild(roofTier1);
+            rootNode.addChild(roofBack);
+            rootNode.addChild(roofLeft);
+            rootNode.addChild(roofRight);
+
+            const gableTop = new Vector3(0, rBase+50, d*0.6);
+            const gableNode = new BIMNode('gable_front', [bFL, bFR, gableTop], { fill: null, stroke: '#d97706', width: 1.5, jitter: 2 }, true);
+            rootNode.addChild(gableNode);
+
+            rootNode.addChild(new BIMNode('chattra', [new Vector3(0, rBase+50, 0), new Vector3(0, rBase+140, 0)], { fill: null, stroke: '#b47a18', width: 2, jitter: 2 }));
+            for(let i=1; i<=5; i++) {
+                rootNode.addChild(new BIMNode('chattra', [new Vector3(-(15-i*2), rBase+50+(i*12), 0), new Vector3((15-i*2), rBase+50+(i*12), 0)], { fill: null, stroke: '#b47a18', width: 1.5, jitter: 1 }));
+            }
+        }
+
+        function getRaw2D(vec3) {
+            const angle = Math.PI / 6; 
+            return { x: (vec3.x - vec3.z) * Math.cos(angle), y: -(vec3.y + (vec3.x + vec3.z) * Math.sin(angle)) };
+        }
+
+        function project(vec3) {
+            const raw = getRaw2D(vec3);
+            return { x: (raw.x * camera.scale) + camera.offsetX, y: (raw.y * camera.scale) + camera.offsetY };
+        }
+
+        function flattenGraph(node) {
+            if (!node) return;
+            if (node.vertices.length > 0) {
+                let zSum = 0;
+                node.vertices.forEach(v => zSum += (v.x + v.y + v.z));
+                node.zDepth = zSum / node.vertices.length;
+                renderQueue.push(node);
+            }
+            flattenGraph(node.firstChild);
+            flattenGraph(node.nextSibling);
+        }
+
+        // 📐 Pure Dynamic Viewport Calculation (ไร้ฮาร์ดโค้ด 100%)
+        function calculateCamera() {
+            renderQueue = [];
+            flattenGraph(rootNode); 
+            let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+            renderQueue.forEach(node => {
+                node.vertices.forEach(v => {
+                    const r = getRaw2D(v); 
+                    if(r.x<minX) minX=r.x; if(r.x>maxX) maxX=r.x; if(r.y<minY) minY=r.y; if(r.y>maxY) maxY=r.y;
+                });
+            });
+            renderQueue.sort((a,b) => a.zDepth - b.zDepth); 
+            
+            const modelW = maxX - minX;
+            const modelH = maxY - minY;
+            
+            // ใช้พื้นที่เต็มจอ 100% (เว้นขอบ 80% เพื่อความสบายตา)
+            camera.scale = Math.min((canvas.width * 0.8) / modelW, (canvas.height * 0.8) / modelH);
+            camera.offsetX = (canvas.width / 2) - ((minX + maxX) / 2 * camera.scale);
+            camera.offsetY = (canvas.height / 2) - ((minY + maxY) / 2 * camera.scale); 
+        }
+
+        function processInput() {
+            let previousId = inputState.hoveredId; 
+            inputState.hoveredId = null;
+            
+            for (let i = renderQueue.length - 1; i >= 0; i--) {
+                const node = renderQueue[i];
+                const pts = node.vertices.map(project);
+                
+                if (pts.length > 2) {
+                    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+                    for(let j=1; j<pts.length; j++) ctx.lineTo(pts[j].x, pts[j].y);
+                    if (ctx.isPointInPath(inputState.mouseX, inputState.mouseY)) {
+                        inputState.hoveredId = node.id; break; 
+                    }
+                } else if (pts.length === 2) {
+                    const cx = (pts[0].x + pts[1].x)/2, cy = (pts[0].y + pts[1].y)/2;
+                    if (Math.hypot(inputState.mouseX - cx, inputState.mouseY - cy) < 30) {
+                        inputState.hoveredId = node.id; break;
+                    }
+                }
+            }
+            if (previousId !== inputState.hoveredId) { needsRedraw = true; updateHUD(); }
+        }
+
+        function updateHUD() {
+            const hud = document.getElementById('bim-hud');
+            if (inputState.hoveredId && bimDatabase[inputState.hoveredId]) {
+                document.getElementById('bim-title').innerText = bimDatabase[inputState.hoveredId].title;
+                document.getElementById('bim-desc').innerText = bimDatabase[inputState.hoveredId].desc;
+                hud.classList.add('active'); canvas.style.cursor = 'pointer';
+            } else {
+                hud.classList.remove('active'); canvas.style.cursor = 'crosshair';
+            }
+        }
+
+        function drawCurvedLine(p1, p2, style, isHovered) {
+            ctx.beginPath();
+            const dx = p2.x - p1.x, dy = p2.y - p1.y, len = Math.hypot(dx, dy); if(len===0) return;
+            const cx = (p1.x + p2.x) / 2 - (dy / len) * 8;
+            const cy = (p1.y + p2.y) / 2 + (dx / len) * 8;
+            ctx.moveTo(p1.x, p1.y);
+            ctx.quadraticCurveTo(cx, cy, p2.x, p2.y);
+            ctx.strokeStyle = isHovered ? '#d97706' : style.stroke;
+            ctx.lineWidth = isHovered ? style.width * 1.5 : style.width;
+            ctx.stroke();
+        }
+
+        function drawLine(p1, p2, style, isHovered) {
+            ctx.beginPath();
+            const dx = p2.x - p1.x, dy = p2.y - p1.y, len = Math.hypot(dx, dy); if(len===0) return;
+            const over = (style.jitter/len)*3, sX = p1.x-(dx*over), sY = p1.y-(dy*over), eX = p2.x+(dx*over), eY = p2.y+(dy*over);
+            ctx.moveTo(sX, sY);
+            for (let i = 1; i <= 4; i++) ctx.lineTo((sX+(eX-sX)*(i/4))+(Math.random()-0.5)*style.jitter, (sY+(eY-sY)*(i/4))+(Math.random()-0.5)*style.jitter);
+            ctx.strokeStyle = isHovered ? '#d97706' : style.stroke;
+            ctx.lineWidth = isHovered ? style.width * 1.5 : style.width;
+            ctx.stroke();
+        }
+
+        function renderPass() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            renderQueue.forEach(node => {
+                const pts = node.vertices.map(project);
+                const isHovered = (node.id === inputState.hoveredId);
+
+                if (node.material.fill && pts.length > 2) {
+                    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+                    for(let i=1; i<pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                    ctx.closePath();
+                    
+                    ctx.fillStyle = isHovered ? '#fff3d4' : brushLibrary['solid'];
+                    ctx.fill(); 
+                    
+                    if (!isHovered && brushLibrary[node.material.fill]) {
+                        ctx.fillStyle = brushLibrary[node.material.fill];
+                        ctx.fill(); 
+                    }
+                }
+
+                for(let i=0; i<pts.length; i++) {
+                    const nextIdx = (node.vertices.length===2)?1:(i+1)%pts.length;
+                    if (node.isCurved && i === 0) {
+                        drawCurvedLine(pts[i], pts[nextIdx], node.material, isHovered);
+                    } else {
+                        drawLine(pts[i], pts[nextIdx], node.material, isHovered);
+                    }
+                    if(node.vertices.length===2) break;
+                }
+            });
+        }
+
+        function engineLoop() {
+            if (needsRedraw) { renderPass(); needsRedraw = false; }
+            requestAnimationFrame(engineLoop);
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => console.log(err));
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        }
+
+        function onPointerMove(e) {
+            e.preventDefault(); 
+            const r = canvas.getBoundingClientRect();
+            inputState.mouseX = (e.clientX || (e.touches && e.touches[0].clientX)) - r.left;
+            inputState.mouseY = (e.clientY || (e.touches && e.touches[0].clientY)) - r.top;
+            processInput(); 
+        }
+
+        canvas.addEventListener('mousemove', onPointerMove);
+        canvas.addEventListener('touchstart', onPointerMove, {passive: false});
+        canvas.addEventListener('touchmove', onPointerMove, {passive: false});
+        canvas.addEventListener('touchend', (e) => { e.preventDefault(); inputState.mouseX = -100; inputState.mouseY = -100; processInput(); }, {passive: false});
+        
+        function initApp() {
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            initBrushes(); buildSceneGraph(); calculateCamera(); needsRedraw = true;
+        }
+        window.addEventListener('resize', () => { initApp(); needsRedraw = true; });
+        
+        initApp(); requestAnimationFrame(engineLoop);
+    </script>
+</body>
+</html>
